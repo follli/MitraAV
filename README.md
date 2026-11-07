@@ -8,16 +8,46 @@ It is triage: it measures signals and names what it can, offline. It is **not** 
 **no network calls during a scan**, and it is not for identifying private individuals (no face
 recognition, no plate reading, no phone numbers or e-mail addresses echoed back).
 
-![Results grouped by what they tell you](docs/screenshot-results.png)
+> **Work in progress.** MitraAV is under active development. Probes, results, wording and the
+> interface will change as the project develops, and features may be reworked or removed where they
+> don't prove useful. Expect rough edges, and treat every result as a lead, never a conclusion.
+> Feedback and bug reports are very welcome.
+
+### Examples
+
+**A photo of a bluebell wood.** The species probe is consistent with English bluebell
+(*Hyacinthoides non-scripta*, 84%) and links to range maps; the scene type and a reverse-search helper
+sit quietly under "Visual context".
+
+![Image: a species identification with range links](docs/screenshot-image-bluebell.png)
+
+**A photo of a cathedral.** The app declines to name a plant from a building scene (shown as plain
+information, not a lead), and reports the camera tags and how the JPEG was written.
+
+![Image: a building scene where no species is suggested](docs/screenshot-image-cathedral.png)
+
+**A video of a train at a level crossing.** The soundtrack is identified as rail transport, and the
+file-history probes describe the audio and video encoding. Probes that found nothing say so ("nothing").
+
+![Video: soundtrack identification and file history](docs/screenshot-video.png)
+
+**An audio fly-by (synthetic).** Results are grouped by what they tell you; the Doppler probe measures
+speed, closest distance and the time offset between events.
+
+![Audio: results grouped by what they tell you](docs/screenshot-results.png)
+
+**The identified signal**, with labelled axes and a live time and frequency readout.
 
 ![The identified signal, with labelled axes and a live time/frequency readout](docs/screenshot-signal.png)
 
+The screenshots show analysis results only; the photos, video and audio themselves are not included.
+
 ## Status
 
-Alpha. Developed and tested on Linux (Python 3.12 and 3.13); the code avoids newer syntax so it should
-run on 3.11 but that has not been run. Windows and macOS are untested. Probes are tuned on a small
-set of real recordings and photos, so expect false positives and misses: every result is a lead, never
-a conclusion, and the app says so (confidence, "inconclusive" for busy audio, "very low" flags).
+Alpha. Developed on Linux; the test suite runs on Python 3.11, 3.12 and 3.13 in CI. Windows and macOS
+are untested. Probes are tuned on a small set of real recordings and photos, so expect false positives
+and misses: every result is a lead, never a conclusion, and the app says so (confidence,
+"inconclusive" for busy audio, "very low" flags).
 
 ## Install
 
