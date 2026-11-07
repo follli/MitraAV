@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSplitter,
+    QSplitterHandle,
     QStyle,
     QStyledItemDelegate,
     QTextBrowser,
@@ -35,8 +36,9 @@ from .preview import MediaPreview, _FullImage
 from .spectro_view import SpectrogramDialog, fmt_time
 
 C = theme.COLORS
-COLUMNS = ["Probe", "Result", "Confidence", "Could narrow", ""]
-FOCUS_COL = 4
+COLUMNS = ["Probe", "Result", "Confidence", ""]
+FOCUS_COL = 3
+DISPLAY = {"church_bells": "tones and chimes"}      # names shown in place of the probe id
 ROLE = Qt.UserRole
 NAME_ROLE = Qt.UserRole + 1
 LAST_GROUP = "File and metadata"
@@ -46,13 +48,11 @@ COLUMN_TIPS = [
     "lead = the probe found something. info = it ran and found nothing notable (click for details; "
     "this is not proof of absence).",
     "How clearly the signal is present: clear, likely or faint. This is not how useful it is.",
-    "How much a lead would cut down where or what to look at. 'file history only' means it "
-    "describes how the file was made, not where it came from.",
     "Row action: Spectro opens the spectrogram on the signal, Image shows the picture full size, "
     "Map opens the coordinates in OpenStreetMap.",
 ]
-EXPLAIN = ("<b>Confidence</b> is how clearly the signal is present. <b>Could narrow</b> is how much "
-           "it would cut down where or what to look at. A clear signal can still narrow little.")
+EXPLAIN = ("<b>Confidence</b> is how clearly the signal is present. A clear signal can still say little "
+           "about where a recording was made.")
 
 
 class ScanWorker(QThread):
@@ -86,6 +86,11 @@ def _rich(text: str) -> str:
     """Escape, then turn **key words** into bold."""
     parts = html.escape(text).split("**")
     return "".join(f"<b>{p}</b>" if i % 2 else p for i, p in enumerate(parts))
+
+
+def _is_active(f: Finding) -> bool:
+    """False for probes that ran but have nothing to act on (info, not run, inconclusive, error)."""
+    return f.status == "ok" and not f.inconclusive and (f.detected or f.quiet)
 
 
 def row_action(f: Finding, media: MediaType | None) -> str:
@@ -180,6 +185,33 @@ class FocusDelegate(QStyledItemDelegate):
         p.restore()
 
 
+class _Grip(QSplitterHandle):
+    """A splitter handle with a small bar in the middle, so it is obvious it can be dragged."""
+
+    def paintEvent(self, e) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        col = QColor(C["muted"])
+        col.setAlpha(255 if self.underMouse() else 150)
+        p.setBrush(col)
+        p.setPen(Qt.NoPen)
+        r = QRectF(self.rect())
+        long_, short = 44.0, 4.0
+        if self.orientation() == Qt.Horizontal:        # a vertical divider: a tall thin bar
+            p.drawRoundedRect(QRectF(r.center().x() - short / 2, r.center().y() - long_ / 2, short, long_), 2, 2)
+        else:
+            p.drawRoundedRect(QRectF(r.center().x() - long_ / 2, r.center().y() - short / 2, long_, short), 2, 2)
+
+
+class GripSplitter(QSplitter):
+    def __init__(self, orientation):
+        super().__init__(orientation)
+        self.setHandleWidth(12)
+
+    def createHandle(self):
+        return _Grip(self.orientation(), self)
+
+
 class ProbeTree(QTreeWidget):
     """The results tree; the pointer becomes a hand over an action pill."""
 
@@ -252,6 +284,7 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.findings: list[Finding] = []
         self.by_name: dict[str, Finding] = {}
+        self.quiet_groups: set[str] = set()
         self.plan: list[tuple[str, str]] = []        # (probe name, group) the scan will run
         self.running: str | None = None
         self.collapsed: set[str] = {"Visual context"}     # quiet context starts folded away
@@ -314,12 +347,10 @@ class MainWindow(QMainWindow):
         hh.setStretchLastSection(False)
         hh.setSectionResizeMode(0, QHeaderView.Fixed)
         hh.setSectionResizeMode(1, QHeaderView.Fixed)
-        hh.setSectionResizeMode(2, QHeaderView.Fixed)
-        hh.setSectionResizeMode(3, QHeaderView.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.Stretch)
         hh.setSectionResizeMode(FOCUS_COL, QHeaderView.Fixed)
         self.tree.setColumnWidth(0, 180)
         self.tree.setColumnWidth(1, 140)
-        self.tree.setColumnWidth(2, 112)
         self.tree.setColumnWidth(FOCUS_COL, 74)
         self.tree.setItemDelegateForColumn(FOCUS_COL, FocusDelegate(self.tree))
         self.tree.itemClicked.connect(self._item_clicked)
@@ -336,7 +367,7 @@ class MainWindow(QMainWindow):
         self.detail.document().setDefaultStyleSheet(theme.DETAIL_CSS)
         self.detail.setHtml(self._placeholder())
 
-        right = QSplitter(Qt.Vertical)                   # preview above the details; drag to resize
+        right = GripSplitter(Qt.Vertical)                   # preview above the details; drag to resize
         right.setChildrenCollapsible(False)
         right.addWidget(self.preview)
         right.addWidget(self.detail)
@@ -344,7 +375,7 @@ class MainWindow(QMainWindow):
         right.setStretchFactor(1, 3)
         right.setSizes([260, 440])
 
-        split = QSplitter(Qt.Horizontal)
+        split = GripSplitter(Qt.Horizontal)
         split.addWidget(self.tree)
         split.addWidget(right)
         split.setStretchFactor(0, 5)
@@ -367,8 +398,8 @@ class MainWindow(QMainWindow):
 
     @staticmethod
     def _placeholder() -> str:
-        return ('<p class="muted">Select a probe on the left to see what it found, what it could '
-                f'narrow, and where to look next.</p><p class="muted">{EXPLAIN}</p>')
+        return ('<p class="muted">Select a probe on the left to see what it found and '
+                f'where to look next.</p><p class="muted">{EXPLAIN}</p>')
 
     # --- input ---
     def _drop_active(self, on: bool) -> None:
@@ -414,7 +445,10 @@ class MainWindow(QMainWindow):
         self.findings.clear()
         self.by_name.clear()
         self.running = None
-        self.plan = [(cls.name, cls.group) for cls, _ in planned(path)]
+        plan = planned(path)
+        self.plan = [(cls.name, cls.group) for cls, _ in plan]
+        self.quiet_groups = {g for g in {c.group for c, _ in plan}
+                             if all(c.quiet for c, _ in plan if c.group == g)}
         self.path = path
         self.drop.setFullText(path.name)
         self.drop.setProperty("loaded", True)
@@ -548,14 +582,19 @@ class MainWindow(QMainWindow):
         for name, group in self.plan:
             if name not in self.by_name:
                 rows.setdefault(group, []).append((name, None))
-        for g, items in rows.items():
-            items.sort(key=lambda r: (r[1] is None, -(r[1].score if r[1] else 0),
-                                      r[1].status != "ok" if r[1] else False, r[0]))
+        for g, items in rows.items():                      # leads, then waiting, then inactive (greyed)
+            items.sort(key=lambda r: (2 if r[1] is not None and not _is_active(r[1]) else
+                                      1 if r[1] is None else 0,
+                                      -(r[1].score if r[1] else 0), r[1].status != "ok" if r[1] else False, r[0]))
+        scanning = any(f is None for items in rows.values() for _, f in items)
+        order = list(dict.fromkeys(group for _, group in self.plan))
 
         def key(g: str):
+            quiet = g in self.quiet_groups or (all(f is not None and f.quiet for _, f in rows[g]) and bool(rows[g]))
+            if scanning:                                   # stable while probes report in: no groups jumping about
+                return (g == LAST_GROUP, quiet, order.index(g) if g in order else 99, g)
             best = max((f.score for _, f in rows[g] if f and not f.quiet), default=0.0)
-            all_quiet = all(f is not None and f.quiet for _, f in rows[g]) and bool(rows[g])
-            return (g == LAST_GROUP, all_quiet, -best, g)
+            return (g == LAST_GROUP, quiet, -best, g)
         return [(g, rows[g]) for g in sorted(rows, key=key)]
 
     def refresh(self) -> None:
@@ -579,7 +618,7 @@ class MainWindow(QMainWindow):
             g.setForeground(1, QColor(C["muted"]))
             self.tree.addTopLevelItem(g)
             for name, f in items:
-                it = QTreeWidgetItem([name.replace("_", " "), "", "", "", ""])
+                it = QTreeWidgetItem([DISPLAY.get(name, name.replace("_", " ")), "", "", ""])
                 it.setData(0, NAME_ROLE, name)
                 if f is None:
                     running = name == self.running
@@ -600,14 +639,15 @@ class MainWindow(QMainWindow):
                                                   "Image": "Show the picture full size (text regions outlined when found)",
                                                   "Map": "Open these coordinates in OpenStreetMap"}[action])
                     if f.inconclusive:
-                        it.setText(3, "busy audio")
+                        it.setText(2, "busy audio")
                     elif f.detected and f.status == "ok" and f.quiet:
-                        it.setText(3, "visible to the eye")
+                        it.setText(2, "visible to the eye")
                     elif f.detected and f.status == "ok":
                         it.setText(2, f.confidence_label)
                         it.setData(2, ROLE, f.strength)
-                        it.setText(3, f.narrows_label)
-                    it.setForeground(3, QColor(C["muted"]))
+                    it.setForeground(2, QColor(C["muted"]))
+                    if not _is_active(f):                  # nothing to act on: name greyed, sits at the bottom
+                        it.setForeground(0, QColor(C["muted"]))
                     for c in range(len(COLUMNS)):          # finished rows sit slightly lighter than queued ones
                         it.setBackground(c, QColor(C["done"]))
                 g.addChild(it)
@@ -626,14 +666,13 @@ class MainWindow(QMainWindow):
                 self.detail.setHtml("<p class='muted'>This probe has not finished yet.</p>")
             return
         label, color = _badge(f)
-        parts = [f"<h3>{html.escape(f.probe)} "
+        parts = [f"<h3>{html.escape(DISPLAY.get(f.probe, f.probe))} "
                  f'<span style="color:{color}">{html.escape(label)}</span></h3>']
         if f.detected and f.status == "ok" and f.quiet and not f.inconclusive:
             parts.append("<p class='muted'>Context only: this reports what the picture shows to the "
                          "eye, so it is not counted as a lead.</p>")
         elif f.detected and f.status == "ok" and not f.inconclusive:
-            parts.append(f"<p><b>Confidence:</b> {f.confidence_label} &nbsp; "
-                         f"<b>Could narrow:</b> {f.narrows_label}</p>")
+            parts.append(f"<p><b>Confidence:</b> {f.confidence_label}</p>")
             if f.very_low:
                 parts.append("<p><span style=\"color:" + C["amber"] + "\"><b>Very low lead.</b></span></p>")
         if f.inconclusive:

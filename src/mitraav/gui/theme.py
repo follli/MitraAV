@@ -53,7 +53,7 @@ QTextBrowser { background: $panel; border: 1px solid $line; border-radius: 14px;
 QStatusBar { background: $bg; color: $muted; }
 QComboBox { background: $panel2; border: 1px solid $line; border-radius: 8px; padding: 6px 12px; }
 QComboBox QAbstractItemView { background: $panel; selection-background-color: $line; }
-QSplitter::handle { background: transparent; width: 10px; height: 10px; }
+QSplitter::handle { background: transparent; }
 QScrollBar:vertical, QScrollBar:horizontal { background: transparent; border: none; margin: 2px; }
 QScrollBar:vertical { width: 10px; }
 QScrollBar:horizontal { height: 10px; }

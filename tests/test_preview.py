@@ -242,3 +242,23 @@ def test_preview_thumbnail_follows_its_pane(tmp_path):
     w.resize(700, 600)
     _wait(100)
     assert w.thumb.pixmap().width() > small
+
+
+def test_inactive_probes_sink_and_groups_stay_put_while_scanning(tmp_path):
+    from mitraav.gui.main_window import DISPLAY
+    _app()
+    w = MainWindow()
+    assert DISPLAY["church_bells"] == "tones and chimes"
+    w.plan = [("mains_hum", "Setting and power"), ("doppler_pass", "Aircraft and motion"),
+              ("siren_pattern", "Sounds"), ("church_bells", "Sounds")]
+    w.add_finding(Finding(probe="siren_pattern", group="Sounds", detected=False, info=True, summary="none"))
+    w.add_finding(Finding(probe="doppler_pass", group="Aircraft and motion", detected=True, strength=.9,
+                          narrows=.9, summary="x"))
+    groups = [w.tree.topLevelItem(i).text(0) for i in range(w.tree.topLevelItemCount())]
+    assert groups == ["Setting and power", "Aircraft and motion", "Sounds"]        # plan order while pending
+    sounds = w.tree.topLevelItem(2)
+    assert [sounds.child(i).text(0) for i in range(2)] == ["tones and chimes", "siren pattern"]   # waiting, then inactive
+    w.add_finding(Finding(probe="church_bells", group="Sounds", detected=False, info=True, summary="none"))
+    w.add_finding(Finding(probe="mains_hum", group="Setting and power", detected=False, info=True, summary="n"))
+    groups = [w.tree.topLevelItem(i).text(0) for i in range(w.tree.topLevelItemCount())]
+    assert groups[0] == "Aircraft and motion"                                       # best lead first once done
