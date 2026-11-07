@@ -185,3 +185,21 @@ def test_several_details_windows_can_be_open_at_once(tmp_path):
     assert len(w._detail_windows) <= 2
     for d in list(w._detail_windows):
         d.close()
+
+
+def test_row_actions_and_merged_play_links():
+    from mitraav.core.finding import FollowUp
+    from mitraav.gui.main_window import map_url, merge_play_links, row_action
+    reg = [dict(label="event 1", t0=5.0, t1=9.0, f0=1, f1=2), dict(label="event 2", t0=9.0, t1=12.0, f0=1, f1=2),
+           dict(label="event 3", t0=60.0, t1=70.0, f0=1, f1=2)]
+    sig = Finding(probe="doppler_pass", group="Aircraft and motion", detected=True, strength=.9, narrows=.4,
+                  summary="x", regions=reg)
+    assert row_action(sig, MediaType.AUDIO) == "Spectro" and row_action(sig, MediaType.IMAGE) == ""
+    osm = Finding(probe="metadata", group="File and metadata", detected=True, strength=.9, narrows=.4, summary="x",
+                  follow_ups=[FollowUp("OpenStreetMap at these coordinates",
+                                       "https://www.openstreetmap.org/?mlat=1&mlon=2#map=16/1/2")])
+    assert row_action(osm, MediaType.IMAGE) == "Map" and map_url(osm).startswith("https://www.openstreetmap.org")
+    txt = Finding(probe="image_text", group="Text and visuals", detected=True, strength=.5, narrows=.2, summary="x")
+    assert row_action(txt, MediaType.IMAGE) == "Image" and row_action(txt, MediaType.AUDIO) == ""
+    links = merge_play_links(reg)
+    assert len(links) == 2 and "1 more" in links[0][1]

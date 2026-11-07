@@ -3,7 +3,7 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QPainter
 from PySide6.QtWidgets import (
     QApplication,
@@ -31,7 +31,7 @@ from ..core.runner import media_of, planned, scan
 from . import theme
 from .addons_dialog import AddonsDialog
 from .history_dialog import HistoryDialog
-from .preview import MediaPreview
+from .preview import MediaPreview, _FullImage
 from .spectro_view import SpectrogramDialog, fmt_time
 
 C = theme.COLORS
@@ -48,7 +48,8 @@ COLUMN_TIPS = [
     "How clearly the signal is present: clear, likely or faint. This is not how useful it is.",
     "How much a lead would cut down where or what to look at. 'file history only' means it "
     "describes how the file was made, not where it came from.",
-    "Details: open the spectrogram on this finding's signal.",
+    "Row action: Spectro opens the spectrogram on the signal, Image shows the picture full size, "
+    "Map opens the coordinates in OpenStreetMap.",
 ]
 EXPLAIN = ("<b>Confidence</b> is how clearly the signal is present. <b>Could narrow</b> is how much "
            "it would cut down where or what to look at. A clear signal can still narrow little.")
@@ -85,6 +86,35 @@ def _rich(text: str) -> str:
     """Escape, then turn **key words** into bold."""
     parts = html.escape(text).split("**")
     return "".join(f"<b>{p}</b>" if i % 2 else p for i, p in enumerate(parts))
+
+
+def row_action(f: Finding, media: MediaType | None) -> str:
+    """The button a result row offers: what is most useful to open for this finding (or "")."""
+    if f.status != "ok" or f.inconclusive:
+        return ""
+    if f.regions and media in (MediaType.AUDIO, MediaType.VIDEO):
+        return "Spectro"
+    if any(u.url.startswith("https://www.openstreetmap.org/?mlat") for u in f.follow_ups):
+        return "Map"
+    if media == MediaType.IMAGE and f.group in ("Text and visuals", "Visual context") and (f.detected or f.quiet):
+        return "Image"
+    return ""
+
+
+def map_url(f: Finding) -> str:
+    return next((u.url for u in f.follow_ups if u.url.startswith("https://www.openstreetmap.org/?mlat")), "")
+
+
+def merge_play_links(regions: list[dict], gap: float = 10.0) -> list[tuple[float, str]]:
+    """One play link per cluster of events that start within `gap` seconds of each other."""
+    rows = sorted((_play_at(r), r["label"]) for r in regions)
+    out: list[list] = []
+    for t, label in rows:
+        if out and t - out[-1][0] < gap:
+            out[-1][2] += 1
+        else:
+            out.append([t, label, 1])
+    return [(t, label if n == 1 else f"{label} and {n - 1} more nearby") for t, label, n in out]
 
 
 def _play_at(region: dict) -> float:
@@ -129,7 +159,7 @@ class PillDelegate(QStyledItemDelegate):
 
 
 class FocusDelegate(QStyledItemDelegate):
-    """A small 'Details' pill on rows that point at a signal in the recording."""
+    """A small action pill (Spectro, Image, Map) on rows that have something to open."""
 
     def paint(self, p, opt, idx) -> None:
         _base(self, p, opt, idx)
@@ -145,12 +175,12 @@ class FocusDelegate(QStyledItemDelegate):
         font.setBold(True)
         p.setFont(font)
         p.setPen(QColor(C["bg"]))                       # dark text on the grey fill
-        p.drawText(r, Qt.AlignCenter, "Details")
+        p.drawText(r, Qt.AlignCenter, str(idx.data(ROLE)))
         p.restore()
 
 
 class ProbeTree(QTreeWidget):
-    """The results tree; the pointer becomes a hand over a Details pill."""
+    """The results tree; the pointer becomes a hand over an action pill."""
 
     def mouseMoveEvent(self, e) -> None:
         idx = self.indexAt(e.position().toPoint())
@@ -268,6 +298,7 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
 
         self.focus_ok = False                            # audio or video: a signal can be shown
+        self.media: MediaType | None = None
         self.tree = ProbeTree()
         self.tree.setMouseTracking(True)
         self.tree.setColumnCount(len(COLUMNS))
@@ -389,7 +420,8 @@ class MainWindow(QMainWindow):
         self.drop.setToolTip(str(path))
         self.preview.load(path, media_of(path))
         self.detail.setHtml(self._placeholder())
-        self.focus_ok = media_of(path) in (MediaType.AUDIO, MediaType.VIDEO)
+        self.media = media_of(path)
+        self.focus_ok = self.media in (MediaType.AUDIO, MediaType.VIDEO)
         if not self.plan:
             self.refresh()
             self.statusBar().showMessage("No probes apply to this file type yet")
@@ -443,13 +475,23 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def _item_clicked(self, item, column: int) -> None:
-        if column == FOCUS_COL and item.data(FOCUS_COL, ROLE):
-            f = self.by_name.get(item.data(0, NAME_ROLE))
-            if f is not None:
-                self.open_spectrogram(f.regions)
+        action = item.data(FOCUS_COL, ROLE) if column == FOCUS_COL else None
+        f = self.by_name.get(item.data(0, NAME_ROLE)) if action else None
+        if f is None:
+            return
+        if action == "Spectro":
+            self.open_spectrogram(f.regions)
+        elif action == "Map":
+            QDesktopServices.openUrl(QUrl(map_url(f)))
+        elif action == "Image" and self.path:
+            dlg = _FullImage(self.path, self)
+            dlg.setAttribute(Qt.WA_DeleteOnClose)
+            dlg.setWindowFlag(Qt.Window, True)
+            self._keep(dlg)
+            dlg.show()
 
     def _item_double_clicked(self, item, column: int) -> None:
-        if column != FOCUS_COL and item.data(FOCUS_COL, ROLE):       # double-click anywhere on the row
+        if column != FOCUS_COL and item.data(FOCUS_COL, ROLE) in ("Spectro", "Image"):   # anywhere on the row
             self._item_clicked(item, FOCUS_COL)
 
     def open_spectrogram(self, regions: list[dict] | None = None) -> None:
@@ -462,11 +504,15 @@ class MainWindow(QMainWindow):
             return
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.setWindowFlag(Qt.Window, True)                 # its own window: several can stay open
+        self._keep(dlg)
+        dlg.show()
+
+    def _keep(self, dlg) -> None:
+        """Hold a reference to an open window; closed windows delete themselves, so drop them on destroy."""
         if not hasattr(self, "_detail_windows"):
             self._detail_windows = []
-        self._detail_windows.append(dlg)                   # closed windows delete themselves: drop them on destroy
+        self._detail_windows.append(dlg)
         dlg.destroyed.connect(lambda _=None, d=dlg: self._detail_windows.remove(d) if d in self._detail_windows else None)
-        dlg.show()
 
     def _link_clicked(self, url) -> None:
         if url.scheme() == "mitraav-play":
@@ -543,9 +589,14 @@ class MainWindow(QMainWindow):
                     it.setText(1, label)
                     it.setData(1, ROLE, color)
                     it.setToolTip(0, plain(f.summary) or f.detail)
-                    if f.regions and self.focus_ok and f.status == "ok":
-                        it.setData(FOCUS_COL, ROLE, True)
-                        it.setToolTip(FOCUS_COL, "Open the spectrogram on this finding's signal")
+                    kind = self.media if self.media in (MediaType.IMAGE,) else (
+                        (self.media or MediaType.AUDIO) if self.focus_ok else self.media)
+                    action = row_action(f, kind)
+                    if action:
+                        it.setData(FOCUS_COL, ROLE, action)
+                        it.setToolTip(FOCUS_COL, {"Spectro": "Open the spectrogram on this finding's signal",
+                                                  "Image": "Show the picture full size",
+                                                  "Map": "Open these coordinates in OpenStreetMap"}[action])
                     if f.inconclusive:
                         it.setText(3, "busy audio")
                     elif f.detected and f.status == "ok" and f.quiet:
@@ -595,8 +646,8 @@ class MainWindow(QMainWindow):
             parts.append(f"<p>{_rich(f.summary) if f.summary else html.escape(f.detail or 'No details.')}</p>")
         if f.regions and self.preview.can_play():
             items = "".join(
-                f'<li><a href="mitraav-play:{_play_at(r):.2f}">▶ {html.escape(r["label"])}'
-                f' (from {fmt_time(_play_at(r))})</a></li>' for r in f.regions[:5])
+                f'<li><a href="mitraav-play:{t:.2f}">▶ {html.escape(label)}'
+                f' (from {fmt_time(t)})</a></li>' for t, label in merge_play_links(f.regions)[:8])
             parts.append(f"<p><b>Play the source:</b></p><ul>{items}</ul>")
         if f.constrains:
             parts.append(f"<p><b>Helps with:</b> {html.escape(', '.join(f.constrains))}</p>")
