@@ -64,7 +64,7 @@ Results are grouped. **Confidence** says how clearly a signal is present (clear,
 **Could narrow** says how much a lead would cut down where or what to look at. "Context" rows
 (scene type, reverse-search helper) only report what you could see yourself and are folded away.
 Rows that point at a signal in a recording have a small action button: **Spectro** opens the spectrogram on that
-finding's signal, **Image** shows a picture full size and **Map** opens GPS coordinates in OpenStreetMap. History (next to Open file) lists earlier scans.
+finding's signal, **Image** shows the picture full size, with any text lines outlined (the text itself is withheld for numbers) and **Map** opens GPS coordinates in OpenStreetMap. History (next to Open file) lists earlier scans.
 
 The file you dropped stays in view: images show a thumbnail (click to enlarge), videos show a frame
 and a small player, and audio gets a player, all above the details. Findings that point at a moment

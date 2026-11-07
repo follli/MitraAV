@@ -52,21 +52,59 @@ def scales_for(size: tuple[int, int]) -> list[float]:
     return out
 
 
-def _tesseract(exe: str, img: Image.Image, use: str, workdir: Path) -> tuple[list[tuple[str, int]], Path]:
+def _tesseract(exe: str, img: Image.Image, use: str, workdir: Path):
     tmp = workdir / f"in{img.width}.png"
     img.save(tmp)
     r = subprocess.run([exe, str(tmp), "stdout", "-l", use, "--psm", "11", "tsv"],
                        capture_output=True, text=True, timeout=120)
     words = []
+    rows: dict[tuple, list] = {}
     for line in r.stdout.splitlines()[1:]:
         parts = line.split("\t")
         if len(parts) == 12 and parts[11].strip():
             try:
                 conf = int(float(parts[10]))
+                x, y, w, h = (int(parts[i]) for i in (6, 7, 8, 9))
             except ValueError:
                 continue
             words.append((parts[11].strip(), conf))
-    return words, tmp
+            if conf >= MIN_CONF:
+                rows.setdefault(tuple(parts[2:5]), []).append((parts[11].strip(), conf, x, y, x + w, y + h))
+    lines = []
+    for ws in rows.values():                                    # one box per text line, as fractions
+        lines.append(dict(text=" ".join(w[0] for w in ws), conf=sum(w[1] for w in ws) / len(ws),
+                          x0=min(w[2] for w in ws) / img.width, y0=min(w[3] for w in ws) / img.height,
+                          x1=max(w[4] for w in ws) / img.width, y1=max(w[5] for w in ws) / img.height))
+    return words, tmp, lines
+
+
+def _iou(a: dict, b: dict) -> float:
+    iw = min(a["x1"], b["x1"]) - max(a["x0"], b["x0"])
+    ih = min(a["y1"], b["y1"]) - max(a["y0"], b["y0"])
+    if iw <= 0 or ih <= 0:
+        return 0.0
+    inter = iw * ih
+    return inter / ((a["x1"] - a["x0"]) * (a["y1"] - a["y0"]) + (b["x1"] - b["x0"]) * (b["y1"] - b["y0"]) - inter)
+
+
+def line_boxes(lines: list[dict], limit: int = 25) -> list[dict]:
+    """Viewer boxes for text lines. Lines with digits, "@" or plate-like strings are boxed but their
+    text is withheld, like everywhere else in the app. Duplicates from several scales are merged."""
+    kept: list[dict] = []
+    for ln in sorted(lines, key=lambda d: -d["conf"]):
+        toks = ln["text"].split()
+        if not any(t.isalpha() and len(t) >= 3 for t in toks) and not re.search(r"\d", ln["text"]):
+            continue                                            # stray marks
+        if any(_iou(ln, k) > 0.4 for k in kept):
+            continue
+        kept.append(ln)
+    out = []
+    for ln in kept[:limit]:
+        sensitive = re.search(r"[\d@]", ln["text"]) or any(PLATE.match(re.sub(r"^\W+|\W+$", "", t))
+                                                           for t in ln["text"].split())
+        label = "number or code (text withheld)" if sensitive else ln["text"][:48]
+        out.append(dict(label=label, **{k: round(ln[k], 4) for k in ("x0", "y0", "x1", "y1")}))
+    return sorted(out, key=lambda b: (b["y0"], b["x0"]))
 
 
 def _real_words(words: list[tuple[str, int]]) -> int:
@@ -75,6 +113,12 @@ def _real_words(words: list[tuple[str, int]]) -> int:
 
 def ocr(path: Path) -> tuple[list[tuple[str, int]], str] | None:
     """Words with confidence, and the raw OSD script line (may be empty). None if no tesseract."""
+    got = ocr_full(path)
+    return None if got is None else got[:2]
+
+
+def ocr_full(path: Path):
+    """Like ocr(), plus the text lines with their boxes (fractions of the picture)."""
     exe = shutil.which("tesseract")
     if not exe:
         return None
@@ -83,13 +127,15 @@ def ocr(path: Path) -> tuple[list[tuple[str, int]], str] | None:
     workdir = Path(tempfile.mkdtemp())
     with Image.open(path) as im:
         gray = im.convert("L")
-    best: tuple[list[tuple[str, int]], Path] | None = None
+    best = None
     merged: list[tuple[str, int]] = []
+    all_lines: list[dict] = []
     for scale in scales_for(gray.size):
         img = gray if abs(scale - 1.0) < 1e-9 else gray.resize(
             (max(1, int(gray.width * scale)), max(1, int(gray.height * scale))))
         got = _tesseract(exe, img, use, workdir)
         merged += got[0]                                        # different scales read different lines
+        all_lines += got[2]
         if best is None or _real_words(got[0]) > _real_words(best[0]):
             best = got
     words, tmp = merged, best[1]
@@ -102,7 +148,7 @@ def ocr(path: Path) -> tuple[list[tuple[str, int]], str] | None:
         # OSD is unreliable on little text: need a confident score and enough words
         enough = sum(1 for _, c in words if c >= MIN_CONF) >= 6
         script = m[1] if m and conf and float(conf[1]) >= 8.0 and enough else ""
-    return words, script
+    return words, script, all_lines
 
 
 def plausible_phone(code_and_rest: str) -> bool:
@@ -162,12 +208,12 @@ class ImageTextProbe(Probe):
     timeout = 240.0
 
     def run(self, path: Path) -> Finding:
-        res = ocr(path)
+        res = ocr_full(path)
         if res is None:
             return Finding(probe=self.name, detected=False, status="not_run",
                            detail="Reading text needs Tesseract: sudo apt install tesseract-ocr "
                                   "(add tesseract-ocr-<language> packs to read other languages)")
-        words, script = res
+        words, script, lines = res
         c = clues(words)
         good = [w for w, conf in words if conf >= MIN_CONF]
         c_pre = c
@@ -210,7 +256,7 @@ class ImageTextProbe(Probe):
                                    + notes[-1] if notes else "Text was read but nothing in it points "
                                    "to a language or country.")
         return Finding(probe=self.name, detected=True, strength=min(1.0, 0.10 + 0.15 * specific),
-                       narrows=0.3, constrains=sorted(set(cons)), effort=1,
+                       narrows=0.3, constrains=sorted(set(cons)), effort=1, boxes=line_boxes(lines),
                        follow_ups=follow_ups("metadata", "text"),
                        summary="; ".join(notes) + ". These are hints (businesses, travellers and "
                        "global services use foreign codes, domains and currencies).")

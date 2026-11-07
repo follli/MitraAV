@@ -203,3 +203,42 @@ def test_row_actions_and_merged_play_links():
     assert row_action(txt, MediaType.IMAGE) == "Image" and row_action(txt, MediaType.AUDIO) == ""
     links = merge_play_links(reg)
     assert len(links) == 2 and "1 more" in links[0][1]
+
+
+def test_line_boxes_withhold_digits_and_merge_scales():
+    from mitraav.probes.image_text import line_boxes
+    a = dict(text="Open for all visitors", conf=90, x0=.1, y0=.1, x1=.5, y1=.2)
+    dup = dict(text="Open for all visitors", conf=70, x0=.11, y0=.1, x1=.5, y1=.2)
+    ph = dict(text="Call +44 20 7946 0958", conf=88, x0=.1, y0=.3, x1=.6, y1=.4)
+    out = line_boxes([dup, ph, a])
+    assert len(out) == 2 and out[0]["label"] == "Open for all visitors"
+    assert "withheld" in out[1]["label"] and "7946" not in str(out)
+
+
+def test_image_viewer_outlines_regions_and_resizes(tmp_path):
+    _app()
+    img = tmp_path / "i.png"
+    Image.new("RGB", (400, 300), "white").save(img)
+    box = [dict(label="hello", x0=.1, y0=.1, x1=.5, y1=.3)]
+    dlg = pv._FullImage(img, None, box)
+    dlg.resize(800, 600)
+    dlg.show()
+    _wait(100)
+    pm = dlg.view.pixmap()
+    assert pm is not None and pm.width() > 400                  # follows the window
+    dlg.close()
+
+
+def test_preview_thumbnail_follows_its_pane(tmp_path):
+    _app()
+    img = tmp_path / "i.png"
+    Image.new("RGB", (400, 300), "white").save(img)
+    w = pv.MediaPreview()
+    w.load(img, MediaType.IMAGE)
+    w.resize(300, 200)
+    w.show()
+    _wait(100)
+    small = w.thumb.pixmap().width()
+    w.resize(700, 600)
+    _wait(100)
+    assert w.thumb.pixmap().width() > small

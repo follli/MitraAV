@@ -37,6 +37,8 @@ class Finding:
     detail: str = ""
     # where the signal is, for viewers: [{"label", "t0", "t1" (file seconds), "f0", "f1" (Hz)}]
     regions: list[dict] = field(default_factory=list)
+    # text lines found in a picture, for viewers: [{"label", "x0", "y0", "x1", "y1"}], fractions of width/height
+    boxes: list[dict] = field(default_factory=list)
     group: str = ""                # set by the runner from the probe class
     quiet: bool = False            # context only: things a user could see for themselves
     info: bool = False             # ran fine, nothing wrong or unusual: shown as "info", not "nothing"

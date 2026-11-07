@@ -96,7 +96,8 @@ def row_action(f: Finding, media: MediaType | None) -> str:
         return "Spectro"
     if any(u.url.startswith("https://www.openstreetmap.org/?mlat") for u in f.follow_ups):
         return "Map"
-    if media == MediaType.IMAGE and f.group in ("Text and visuals", "Visual context") and (f.detected or f.quiet):
+    if media == MediaType.IMAGE and (f.boxes or (f.group in ("Text and visuals", "Visual context")
+                                                 and (f.detected or f.quiet))):
         return "Image"
     return ""
 
@@ -335,12 +336,13 @@ class MainWindow(QMainWindow):
         self.detail.document().setDefaultStyleSheet(theme.DETAIL_CSS)
         self.detail.setHtml(self._placeholder())
 
-        right = QWidget()                                # preview above the details
-        rl = QVBoxLayout(right)
-        rl.setContentsMargins(0, 0, 0, 0)
-        rl.setSpacing(12)
-        rl.addWidget(self.preview)
-        rl.addWidget(self.detail, 1)
+        right = QSplitter(Qt.Vertical)                   # preview above the details; drag to resize
+        right.setChildrenCollapsible(False)
+        right.addWidget(self.preview)
+        right.addWidget(self.detail)
+        right.setStretchFactor(0, 2)
+        right.setStretchFactor(1, 3)
+        right.setSizes([260, 440])
 
         split = QSplitter(Qt.Horizontal)
         split.addWidget(self.tree)
@@ -484,7 +486,7 @@ class MainWindow(QMainWindow):
         elif action == "Map":
             QDesktopServices.openUrl(QUrl(map_url(f)))
         elif action == "Image" and self.path:
-            dlg = _FullImage(self.path, self)
+            dlg = _FullImage(self.path, self, f.boxes)
             dlg.setAttribute(Qt.WA_DeleteOnClose)
             dlg.setWindowFlag(Qt.Window, True)
             self._keep(dlg)
@@ -595,7 +597,7 @@ class MainWindow(QMainWindow):
                     if action:
                         it.setData(FOCUS_COL, ROLE, action)
                         it.setToolTip(FOCUS_COL, {"Spectro": "Open the spectrogram on this finding's signal",
-                                                  "Image": "Show the picture full size",
+                                                  "Image": "Show the picture full size (text regions outlined when found)",
                                                   "Map": "Open these coordinates in OpenStreetMap"}[action])
                     if f.inconclusive:
                         it.setText(3, "busy audio")

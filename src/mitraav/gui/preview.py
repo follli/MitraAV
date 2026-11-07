@@ -9,8 +9,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from PIL import Image, ImageOps
-from PySide6.QtCore import Qt, QThread, QUrl, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtCore import QRectF, Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -87,17 +87,65 @@ class _ThumbWorker(QThread):
             self.done.emit(str(self.path), QImage(str(f)))
 
 
+class _BoxedImage(QLabel):
+    """A picture that rescales with its window and can outline regions (boxes in fractions)."""
+
+    def __init__(self, pix: QPixmap | None, boxes: list[dict] | None = None):
+        super().__init__()
+        self.pix = pix
+        self.boxes = boxes or []
+        self.setAlignment(Qt.AlignCenter)
+        self.setMinimumSize(200, 150)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        if pix is None:
+            self.setText("Cannot show this image")
+
+    def resizeEvent(self, e) -> None:
+        super().resizeEvent(e)
+        self._redraw()
+
+    def _redraw(self) -> None:
+        if self.pix is None:
+            return
+        pm = self.pix.scaled(self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        if self.boxes:
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.Antialiasing)
+            pen = QPen(QColor("#fbbf24"))
+            pen.setWidth(2)
+            for b in self.boxes:
+                x0, y0 = b["x0"] * pm.width(), b["y0"] * pm.height()
+                w, h = (b["x1"] - b["x0"]) * pm.width(), (b["y1"] - b["y0"]) * pm.height()
+                p.setPen(pen)
+                p.drawRect(QRectF(x0 - 3, y0 - 3, w + 6, h + 6))
+            p.end()
+        self.setPixmap(pm)
+
+    def box_at(self, x: float, y: float) -> dict | None:
+        """The box under a point in this widget's coordinates, for tooltips."""
+        pm = self.pixmap()
+        if pm is None or pm.isNull():
+            return None
+        ox, oy = (self.width() - pm.width()) / 2, (self.height() - pm.height()) / 2
+        fx, fy = (x - ox) / pm.width(), (y - oy) / pm.height()
+        return next((b for b in self.boxes if b["x0"] <= fx <= b["x1"] and b["y0"] <= fy <= b["y1"]), None)
+
+    def mouseMoveEvent(self, e) -> None:
+        b = self.box_at(e.position().x(), e.position().y())
+        self.setToolTip(b["label"] if b else "")
+        super().mouseMoveEvent(e)
+
+
 class _FullImage(QDialog):
-    def __init__(self, path: Path, parent=None):
+    def __init__(self, path: Path, parent=None, boxes: list[dict] | None = None):
         super().__init__(parent)
-        self.setWindowTitle(path.name)
-        lab = QLabel()
-        lab.setAlignment(Qt.AlignCenter)
-        pix = load_thumbnail(path, (1400, 1000))
-        lab.setPixmap(pix) if pix else lab.setText("Cannot show this image")
+        self.setWindowTitle(path.name + (f" - {len(boxes)} text region(s) outlined" if boxes else ""))
+        pix = load_thumbnail(path, (3000, 2400))
+        self.view = _BoxedImage(pix, boxes)
+        self.view.setMouseTracking(True)
         lay = QVBoxLayout(self)
-        lay.addWidget(lab)
-        self.resize(min(1000, (pix.width() if pix else 400) + 40), min(760, (pix.height() if pix else 200) + 40))
+        lay.addWidget(self.view, 1)
+        self.resize(min(1100, (pix.width() if pix else 400) + 40), min(800, (pix.height() if pix else 200) + 40))
 
 
 class MediaPreview(QFrame):
@@ -116,6 +164,8 @@ class MediaPreview(QFrame):
 
         self.thumb = QLabel()
         self.thumb.setAlignment(Qt.AlignCenter)
+        self.thumb.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)   # follows the pane, never forces it
+        self._thumb_src: QPixmap | None = None
         self.thumb.setCursor(Qt.PointingHandCursor)
         self.thumb.mousePressEvent = lambda e: self._thumb_clicked()
         self.audio_page = QLabel("♪")
@@ -209,19 +259,20 @@ class MediaPreview(QFrame):
         if media == MediaType.IMAGE:
             pix = load_thumbnail(self.path)
             if pix:
-                self.thumb.setPixmap(pix.scaled(THUMB_W, THUMB_H, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self._set_thumb(pix)
                 self.thumb.setToolTip("Click to enlarge")
             else:
                 self.thumb.setText("Cannot show this image")
             self.stack.setCurrentWidget(self.thumb)
-            self.stack.setFixedHeight(THUMB_H)
+            self._sizing(resizable=True)
             self.controls.setVisible(False)
         elif media == MediaType.VIDEO:
+            self._thumb_src = None
             self.thumb.clear()
             self.thumb.setText("video")
             self.thumb.setToolTip("Click to play")
             self.stack.setCurrentWidget(self.thumb)
-            self.stack.setFixedHeight(THUMB_H)
+            self._sizing(resizable=True)
             worker = _ThumbWorker(self.path)
             worker.done.connect(self._thumb_ready)
             worker.finished.connect(lambda w=worker: self._workers.remove(w) if w in self._workers else None)
@@ -230,7 +281,7 @@ class MediaPreview(QFrame):
             self._open_player()
         elif media == MediaType.AUDIO:
             self.stack.setCurrentWidget(self.audio_page)
-            self.stack.setFixedHeight(AUDIO_H)
+            self._sizing(resizable=False)
             self._open_player()
         else:
             return
@@ -248,8 +299,30 @@ class MediaPreview(QFrame):
 
     def _thumb_ready(self, path: str, img: QImage) -> None:
         if self.path and str(self.path) == path and self.stack.currentWidget() is self.thumb:
-            pix = QPixmap.fromImage(img)
-            self.thumb.setPixmap(pix.scaled(THUMB_W, THUMB_H, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+            self._set_thumb(QPixmap.fromImage(img))
+
+    def _sizing(self, resizable: bool) -> None:
+        """Images and video grow with the pane (drag the splitter or maximise); audio stays a slim bar."""
+        if resizable:
+            self.stack.setMinimumHeight(90)
+            self.stack.setMaximumHeight(16777215)
+            self.setMaximumHeight(16777215)
+        else:
+            self.stack.setFixedHeight(AUDIO_H)
+            self.setMaximumHeight(AUDIO_H + 90)
+
+    def _set_thumb(self, pix: QPixmap) -> None:
+        self._thumb_src = pix
+        self._fit_thumb()
+
+    def _fit_thumb(self) -> None:
+        if self._thumb_src is not None and not self._thumb_src.isNull() and self.thumb.width() > 8:
+            self.thumb.setPixmap(self._thumb_src.scaled(self.thumb.size(), Qt.KeepAspectRatio,
+                                                        Qt.SmoothTransformation))
+
+    def resizeEvent(self, e) -> None:
+        super().resizeEvent(e)
+        self._fit_thumb()
 
     def _thumb_clicked(self) -> None:
         if self.media == MediaType.IMAGE and self.path:
