@@ -139,9 +139,12 @@ class FocusDelegate(QStyledItemDelegate):
         p.setRenderHint(QPainter.Antialiasing)
         r = QRectF(opt.rect).adjusted(6, 9, -14, -9)
         p.setPen(QColor(C["muted"]))
-        p.setBrush(QColor(C["panel2"]))
+        p.setBrush(QColor(C["muted"]))                  # filled with the outline colour: a button
         p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
-        p.setPen(QColor(C["text"]))
+        font = QFont(p.font())
+        font.setBold(True)
+        p.setFont(font)
+        p.setPen(QColor(C["bg"]))                       # dark text on the grey fill
         p.drawText(r, Qt.AlignCenter, "Focus")
         p.restore()
 
