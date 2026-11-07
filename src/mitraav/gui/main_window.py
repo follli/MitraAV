@@ -3,8 +3,8 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtCore import QRectF, QSize, Qt, QThread, QTimer, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QFont, QPainter
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -31,7 +31,8 @@ from ..core.runner import media_of, planned, scan
 from . import theme
 from .addons_dialog import AddonsDialog
 from .history_dialog import HistoryDialog
-from .spectro_view import SpectrogramDialog
+from .preview import MediaPreview
+from .spectro_view import SpectrogramDialog, fmt_time
 
 C = theme.COLORS
 COLUMNS = ["Probe", "Result", "Confidence", "Could narrow"]
@@ -82,6 +83,11 @@ def _rich(text: str) -> str:
     """Escape, then turn **key words** into bold."""
     parts = html.escape(text).split("**")
     return "".join(f"<b>{p}</b>" if i % 2 else p for i, p in enumerate(parts))
+
+
+def _play_at(region: dict) -> float:
+    """Where playback should start for a region: just before the event when a probe says so."""
+    return max(0.0, float(region.get("t_play", region["t0"])))
 
 
 def _is_lead(f: Finding) -> bool:
@@ -147,6 +153,33 @@ class ConfidenceDelegate(QStyledItemDelegate):
         p.restore()
 
 
+class ElidedLabel(QLabel):
+    """A label that shortens its text in the middle to fit, keeping the full text available."""
+
+    def __init__(self, text: str = ""):
+        super().__init__()
+        self._full = ""
+        self.setFullText(text)
+
+    def setFullText(self, text: str) -> None:
+        self._full = text
+        self._elide()
+
+    def fullText(self) -> str:
+        return self._full
+
+    def resizeEvent(self, e) -> None:
+        super().resizeEvent(e)
+        self._elide()
+
+    def _elide(self) -> None:
+        room = max(20, self.width() - 40)
+        super().setText(self.fontMetrics().elidedText(self._full, Qt.ElideMiddle, room))
+
+    def minimumSizeHint(self):
+        return QSize(80, super().minimumSizeHint().height())
+
+
 class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
@@ -170,11 +203,10 @@ class MainWindow(QMainWindow):
         names.setSpacing(0)
         names.addWidget(title)
         names.addWidget(sub)
-        self.chip = QLabel("no scan yet")
-        self.chip.setObjectName("chip")
         open_btn = QPushButton("Open file")
+        open_btn.setObjectName("segLeft")
         open_btn.clicked.connect(self.choose_file)
-        self.spec_btn = QPushButton("Show signal")
+        self.spec_btn = QPushButton("Focus Signal")
         self.spec_btn.setObjectName("secondary")
         self.spec_btn.setEnabled(False)
         self.spec_btn.clicked.connect(self.open_spectrogram)
@@ -182,22 +214,26 @@ class MainWindow(QMainWindow):
         addons_btn.setObjectName("secondary")
         addons_btn.clicked.connect(self.open_addons)
         hist_btn = QPushButton("History")
-        hist_btn.setObjectName("secondary")
+        hist_btn.setObjectName("segRight")
         hist_btn.clicked.connect(self.open_history)
+        split = QHBoxLayout()                           # Open file | History, one split pill
+        split.setSpacing(0)
+        split.addWidget(open_btn)
+        split.addWidget(hist_btn)
+        self.drop = ElidedLabel("Drop a file here")       # the drop target: also shows the file name
+        self.drop.setObjectName("dropzone")
+        self.drop.setAlignment(Qt.AlignCenter)
+        self.drop.setFixedHeight(38)
+        self.drop.setMaximumWidth(420)
         header = QHBoxLayout()
         header.setSpacing(10)
         header.addLayout(names)
-        header.addStretch(1)
-        header.addWidget(self.chip)
+        header.addWidget(self.drop, 1)
+        header.addLayout(split)
         header.addWidget(addons_btn)
-        header.addWidget(hist_btn)
         header.addWidget(self.spec_btn)
-        header.addWidget(open_btn)
 
-        self.drop = QLabel("Drop an image, audio or video file here")
-        self.drop.setObjectName("dropzone")
-        self.drop.setAlignment(Qt.AlignCenter)
-        self.drop.setMinimumHeight(64)
+        self.preview = MediaPreview()
 
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
@@ -228,13 +264,21 @@ class MainWindow(QMainWindow):
         self.tree.itemExpanded.connect(lambda it: self.collapsed.discard(it.text(0)))
 
         self.detail = QTextBrowser()
-        self.detail.setOpenExternalLinks(True)
+        self.detail.setOpenLinks(False)                 # we route links: play-from-here or the browser
+        self.detail.anchorClicked.connect(self._link_clicked)
         self.detail.document().setDefaultStyleSheet(theme.DETAIL_CSS)
         self.detail.setHtml(self._placeholder())
 
+        right = QWidget()                                # preview above the details
+        rl = QVBoxLayout(right)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(12)
+        rl.addWidget(self.preview)
+        rl.addWidget(self.detail, 1)
+
         split = QSplitter(Qt.Horizontal)
         split.addWidget(self.tree)
-        split.addWidget(self.detail)
+        split.addWidget(right)
         split.setStretchFactor(0, 5)
         split.setStretchFactor(1, 4)
         split.setSizes([640, 440])
@@ -244,7 +288,6 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(20, 16, 20, 10)
         lay.setSpacing(14)
         lay.addLayout(header)
-        lay.addWidget(self.drop)
         lay.addWidget(self.progress)
         lay.addWidget(split, 1)
         self.setCentralWidget(root)
@@ -305,22 +348,20 @@ class MainWindow(QMainWindow):
         self.running = None
         self.plan = [(cls.name, cls.group) for cls, _ in planned(path)]
         self.path = path
-        self.drop.setText(path.name)
+        self.drop.setFullText(path.name)
         self.drop.setProperty("loaded", True)
         self._drop_active(False)
         self.drop.setToolTip(str(path))
+        self.preview.load(path, media_of(path))
         self.detail.setHtml(self._placeholder())
         self.spec_btn.setEnabled(media_of(path) in (MediaType.AUDIO, MediaType.VIDEO))
         if not self.plan:
             self.refresh()
-            self.chip.setText("nothing to run")
             self.statusBar().showMessage("No probes apply to this file type yet")
             return
         self.progress.setRange(0, len(self.plan))
         self.progress.setValue(0)
         self.progress.setVisible(True)
-        self.chip.setText(f"scanning 0/{len(self.plan)}")
-        self._chip_lead(False)
         self.statusBar().showMessage("Scanning...")
         self.refresh()
         self.timer.start()
@@ -343,13 +384,7 @@ class MainWindow(QMainWindow):
             self.running = None
         if self.plan:
             self.progress.setValue(min(len(self.findings), len(self.plan)))
-            self.chip.setText(f"scanning {min(len(self.findings), len(self.plan))}/{len(self.plan)}")
         self.refresh()
-
-    def _chip_lead(self, on: bool) -> None:
-        self.chip.setProperty("lead", on)
-        self.chip.style().unpolish(self.chip)
-        self.chip.style().polish(self.chip)
 
     def scan_done(self) -> None:
         self.timer.stop()
@@ -357,7 +392,6 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
         self.refresh()
         if not self.findings:
-            self.chip.setText("no probes ran")
             self.statusBar().showMessage("No probes apply to this file type yet")
             return
         leads = sum(1 for f in self.findings if _is_lead(f))
@@ -365,8 +399,6 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             f"Done: {leads} lead(s) from {len(self.findings)} probe(s)"
             + (f" · {need} probe(s) need add-ons (see Add-ons)" if need else ""))
-        self.chip.setText(f"{leads} lead{'s' if leads != 1 else ''} · {len(self.findings)} probes")
-        self._chip_lead(leads > 0)
         if self.path:
             history.add(self.path, leads, len(self.findings))
 
@@ -384,6 +416,15 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(str(e))
             return
         dlg.exec()
+
+    def _link_clicked(self, url) -> None:
+        if url.scheme() == "mitraav-play":
+            try:
+                self.preview.play_from(float(url.path()))
+            except ValueError:
+                pass
+            return
+        QDesktopServices.openUrl(url)
 
     def _regions(self) -> list[dict]:
         """The selected lead's signal regions, else those of the best-scoring lead."""
@@ -497,6 +538,11 @@ class MainWindow(QMainWindow):
             parts.append("<ul>" + "".join(f"<li>{_rich(seg)}</li>" for seg in f.summary.split(" • ")) + "</ul>")
         else:
             parts.append(f"<p>{_rich(f.summary) if f.summary else html.escape(f.detail or 'No details.')}</p>")
+        if f.regions and self.preview.can_play():
+            items = "".join(
+                f'<li><a href="mitraav-play:{_play_at(r):.2f}">▶ {html.escape(r["label"])}'
+                f' (from {fmt_time(_play_at(r))})</a></li>' for r in f.regions[:5])
+            parts.append(f"<p><b>Play the source:</b></p><ul>{items}</ul>")
         if f.constrains:
             parts.append(f"<p><b>Helps with:</b> {html.escape(', '.join(f.constrains))}</p>")
         if f.follow_ups:

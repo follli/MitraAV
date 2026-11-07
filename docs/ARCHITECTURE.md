@@ -28,7 +28,8 @@ src/mitraav/
              birdworker.py, birdgeo.py, nature.py, references.py
   probes/    one file per probe, auto-discovered
   references/ follow-up links and lookup tables as YAML, label files as text (package data)
-  gui/       main_window.py, spectro_view.py, addons_dialog.py, history_dialog.py, theme.py
+  gui/       main_window.py, preview.py (thumbnail / audio / video player), spectro_view.py,
+             addons_dialog.py, history_dialog.py, theme.py
   cli.py  setup_models.py
 tests/  scripts/  testmedia/  samples/make_samples.py
 ```
@@ -39,6 +40,8 @@ One file in `probes/` subclassing `Probe` (`name`, `group`, `media`, `timeout`, 
 entries in a `references/*.yaml` file for follow-ups, and tests. Report `strength` (how clearly the
 signal is present), `narrows` (how much a lead would cut down where or what to look at), `constrains`,
 `effort`, follow-ups and, where useful, `regions` (time/frequency boxes the signal viewer opens on).
+Regions may carry `t_play` (seconds, file time), where the GUI's "play from here" link starts
+playback (a few seconds before the event); otherwise it uses `t0`.
 Wrap key words in `**double asterisks**` in summaries; the GUI shows them bold and `plain()` strips
 them for the CLI and JSON.
 

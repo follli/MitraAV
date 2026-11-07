@@ -142,7 +142,8 @@ class BroadbandPassbyProbe(Probe):
         notes.append("the loudness peak is when the sound arrives, so shift ADS-B closest-approach "
                      "times later by slant distance / 343 m/s before comparing")
         region = dict(label=f"loudness peak near {r['t_peak']:.0f} s",
-                      t0=max(0.0, r["t_lo"] - 15), t1=r["t_hi"] + 15, f0=FLO, f1=min(FHI, 0.45 * sr))
+                      t0=max(0.0, r["t_lo"] - 15), t1=r["t_hi"] + 15, t_play=max(0.0, r["t_lo"] - 2),
+                      f0=FLO, f1=min(FHI, 0.45 * sr))
         return Finding(probe=self.name, detected=True, strength=strength, narrows=0.25,
                        regions=[region],
                        constrains=cons, effort=3, follow_ups=follow_ups("audio", "doppler"),

@@ -14,17 +14,18 @@ QWidget { background: $bg; color: $text; font-size: 13px; }
 QLabel { background: transparent; }
 QLabel#title { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
 QLabel#subtitle, QLabel#hint { color: $muted; }
-QLabel#chip { background: $panel2; border: 1px solid $line; border-radius: 10px;
-              padding: 3px 10px; color: $muted; font-weight: 600; }
-QLabel#chip[lead="true"] { color: $text; border-color: $muted; }
 QFrame#card { background: $panel; border: 1px solid $line; border-radius: 14px; }
-QLabel#dropzone { background: $panel; border: 2px dashed $line; border-radius: 14px;
-                  padding: 16px; font-size: 14px; font-weight: 600; color: $muted; }
-QLabel#dropzone[loaded="true"] { color: $text; border-style: solid; }
-QLabel#dropzone[active="true"] { border: 2px solid $accent; background: $panel2; color: $text; }
+QLabel#dropzone { background: $panel; border: 1px dashed $muted; border-radius: 9px;
+                  padding: 0 14px; font-size: 13px; font-weight: 600; color: $muted; }
+QLabel#dropzone[loaded="true"] { color: $text; border: 1px solid $line; }
+QLabel#dropzone[active="true"] { border: 1px solid $accent; background: $panel2; color: $text; }
 QPushButton { background: $accent; color: $bg; border: none; border-radius: 9px;
               padding: 9px 18px; font-weight: 700; }
 QPushButton:hover { background: $accent_hi; }
+QPushButton#segLeft { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+QPushButton#segRight { background: $panel2; color: $text; border: 1px solid $line; border-left: none;
+                       border-top-left-radius: 0; border-bottom-left-radius: 0; }
+QPushButton#segRight:hover { background: $panel2; border-color: $accent_hi; }
 QPushButton[flat="true"], QPushButton#secondary { background: $panel2; color: $text;
               border: 1px solid $line; }
 QPushButton#secondary:hover { border-color: $accent_hi; }
@@ -35,6 +36,9 @@ QTreeWidget::item { padding: 6px 8px; border-bottom: 1px solid $line; }
 QTreeWidget::item:selected, QListWidget::item:selected { background: $panel2; }
 QListWidget::item { padding: 8px; border-bottom: 1px solid $line; }
 QListWidget::item:disabled { color: $muted; }
+QSlider::groove:horizontal { background: $panel2; height: 6px; border-radius: 3px; }
+QSlider::sub-page:horizontal { background: $accent; border-radius: 3px; }
+QSlider::handle:horizontal { background: $text; width: 12px; margin: -4px 0; border-radius: 6px; }
 QProgressBar { background: $panel2; border: none; border-radius: 3px; max-height: 6px; color: transparent; }
 QProgressBar::chunk { background: $blue; border-radius: 3px; }
 QTableWidget { background: $panel; alternate-background-color: $panel; border: 1px solid $line;

@@ -1,0 +1,258 @@
+"""A small preview of the source file, so you can go back to what was analysed.
+
+Images get a thumbnail (click to enlarge). Video gets a thumbnail frame and, on Play, a small
+player. Audio gets a compact player. Findings with time regions can start playback at that moment.
+If Qt's multimedia support is missing, the widget degrades to thumbnails and says so.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+from PIL import Image, ImageOps
+from PySide6.QtCore import Qt, QThread, QUrl, Signal
+from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtWidgets import (
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QStackedWidget,
+    QStyle,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ..core.finding import MediaType
+from ..core.frames import thumbnail
+from .spectro_view import fmt_time
+
+try:                                           # multimedia is optional at runtime
+    from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+    from PySide6.QtMultimediaWidgets import QVideoWidget
+    HAVE_MEDIA = True
+except Exception:                              # pragma: no cover - depends on the Qt install
+    HAVE_MEDIA = False
+
+THUMB_W, THUMB_H = 280, 150
+AUDIO_H = 48
+
+
+def pil_to_pixmap(img: Image.Image) -> QPixmap:
+    img = img.convert("RGB")
+    qi = QImage(img.tobytes(), img.width, img.height, 3 * img.width, QImage.Format_RGB888).copy()
+    return QPixmap.fromImage(qi)
+
+
+def load_thumbnail(path: Path, box: tuple[int, int] = (THUMB_W * 2, THUMB_H * 2)) -> QPixmap | None:
+    """Thumbnail of an image file (EXIF orientation applied); None if it cannot be read."""
+    try:
+        with Image.open(path) as im:
+            im = ImageOps.exif_transpose(im)
+            im.thumbnail(box)
+            return pil_to_pixmap(im)
+    except Exception:
+        return None
+
+
+class _ThumbWorker(QThread):
+    """Extracts one video frame off the GUI thread (large files can take a moment to seek)."""
+    done = Signal(str, QImage)
+
+    def __init__(self, path: Path):
+        super().__init__()
+        self.path = path
+
+    def run(self) -> None:
+        f = thumbnail(self.path, width=THUMB_W * 2)
+        if f and f.exists():
+            self.done.emit(str(self.path), QImage(str(f)))
+
+
+class _FullImage(QDialog):
+    def __init__(self, path: Path, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(path.name)
+        lab = QLabel()
+        lab.setAlignment(Qt.AlignCenter)
+        pix = load_thumbnail(path, (1400, 1000))
+        lab.setPixmap(pix) if pix else lab.setText("Cannot show this image")
+        lay = QVBoxLayout(self)
+        lay.addWidget(lab)
+        self.resize(min(1000, (pix.width() if pix else 400) + 40), min(760, (pix.height() if pix else 200) + 40))
+
+
+class MediaPreview(QFrame):
+    """Thumbnail or player for the file being analysed."""
+
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setObjectName("card")
+        self.path: Path | None = None
+        self.media: MediaType | None = None
+        self.player = None
+        self._worker: _ThumbWorker | None = None
+        self._dragging = False
+
+        self.thumb = QLabel()
+        self.thumb.setAlignment(Qt.AlignCenter)
+        self.thumb.setCursor(Qt.PointingHandCursor)
+        self.thumb.mousePressEvent = lambda e: self._thumb_clicked()
+        self.audio_page = QLabel("♪")
+        self.audio_page.setAlignment(Qt.AlignCenter)
+        self.audio_page.setObjectName("audioglyph")
+        self.audio_page.setStyleSheet("font-size: 34px; color: #8e9096;")
+        self.video = QVideoWidget() if HAVE_MEDIA else QLabel()
+        self.video.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)   # its size hint is huge
+        self.stack = QStackedWidget()
+        for w in (self.thumb, self.audio_page, self.video):
+            self.stack.addWidget(w)
+
+        self.play_btn = QPushButton()
+        self.play_btn.setObjectName("secondary")
+        self.play_btn.setFixedWidth(40)
+        self._play_icon = self.style().standardIcon(QStyle.SP_MediaPlay)
+        self._pause_icon = self.style().standardIcon(QStyle.SP_MediaPause)
+        self.play_btn.setIcon(self._play_icon)
+        self.play_btn.clicked.connect(self.toggle)
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setRange(0, 0)
+        self.time = QLabel("0:00 / 0:00")
+        self.time.setObjectName("hint")
+        self.note = QLabel("")
+        self.note.setObjectName("hint")
+        self.note.setWordWrap(True)
+        self.controls = QWidget()
+        cl = QHBoxLayout(self.controls)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.addWidget(self.play_btn)
+        cl.addWidget(self.slider, 1)
+        cl.addWidget(self.time)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(8)
+        lay.addWidget(self.stack)
+        lay.addWidget(self.controls)
+        lay.addWidget(self.note)
+
+        if HAVE_MEDIA:
+            self.player = QMediaPlayer(self)
+            self.audio_out = QAudioOutput(self)
+            self.audio_out.setVolume(0.8)
+            self.player.setAudioOutput(self.audio_out)
+            self.player.setVideoOutput(self.video)
+            self.player.positionChanged.connect(self._position)
+            self.player.durationChanged.connect(self._duration)
+            self.player.playbackStateChanged.connect(self._state)
+            self.player.errorOccurred.connect(self._error)
+            self.slider.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
+            self.slider.sliderReleased.connect(self._released)
+        self.clear()
+
+    # --- loading ---
+    def clear(self) -> None:
+        if self.player:
+            self.player.stop()
+            self.player.setSource(QUrl())
+        self.path, self.media = None, None
+        self.controls.setVisible(False)
+        self.note.setText("")
+        self.setVisible(False)
+
+    def load(self, path: Path, media: MediaType | None) -> None:
+        self.clear()
+        self.path, self.media = Path(path), media
+        self.slider.setRange(0, 0)
+        self.time.setText("0:00 / 0:00")
+        self.play_btn.setIcon(self._play_icon)
+        if media == MediaType.IMAGE:
+            pix = load_thumbnail(self.path)
+            if pix:
+                self.thumb.setPixmap(pix.scaled(THUMB_W, THUMB_H, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.thumb.setToolTip("Click to enlarge")
+            else:
+                self.thumb.setText("Cannot show this image")
+            self.stack.setCurrentWidget(self.thumb)
+            self.stack.setFixedHeight(THUMB_H)
+            self.controls.setVisible(False)
+        elif media == MediaType.VIDEO:
+            self.thumb.clear()
+            self.thumb.setText("video")
+            self.thumb.setToolTip("Click to play")
+            self.stack.setCurrentWidget(self.thumb)
+            self.stack.setFixedHeight(THUMB_H)
+            self._worker = _ThumbWorker(self.path)
+            self._worker.done.connect(self._thumb_ready)
+            self._worker.start()
+            self._open_player()
+        elif media == MediaType.AUDIO:
+            self.stack.setCurrentWidget(self.audio_page)
+            self.stack.setFixedHeight(AUDIO_H)
+            self._open_player()
+        else:
+            return
+        self.setVisible(True)
+
+    def _open_player(self) -> None:
+        if not self.player:
+            self.controls.setVisible(False)
+            self.note.setText("Playback is unavailable (Qt multimedia was not found).")
+            return
+        self.controls.setVisible(True)
+        self.player.setSource(QUrl.fromLocalFile(str(self.path)))
+
+    def _thumb_ready(self, path: str, img: QImage) -> None:
+        if self.path and str(self.path) == path and self.stack.currentWidget() is self.thumb:
+            pix = QPixmap.fromImage(img)
+            self.thumb.setPixmap(pix.scaled(THUMB_W, THUMB_H, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def _thumb_clicked(self) -> None:
+        if self.media == MediaType.IMAGE and self.path:
+            _FullImage(self.path, self.window()).exec()
+        elif self.media == MediaType.VIDEO:
+            self.toggle()
+
+    # --- playback ---
+    def toggle(self) -> None:
+        if not self.player or not self.path:
+            return
+        if self.player.playbackState() == QMediaPlayer.PlayingState:
+            self.player.pause()
+            return
+        if self.media == MediaType.VIDEO:
+            self.stack.setCurrentWidget(self.video)
+        self.player.play()
+
+    def play_from(self, seconds: float) -> bool:
+        """Start playing at `seconds` (file time). False when there is nothing to play."""
+        if not self.player or not self.path or self.media not in (MediaType.AUDIO, MediaType.VIDEO):
+            return False
+        if self.media == MediaType.VIDEO:
+            self.stack.setCurrentWidget(self.video)
+        self.player.setPosition(max(0, int(seconds * 1000)))
+        self.player.play()
+        return True
+
+    def can_play(self) -> bool:
+        return bool(self.player and self.path and self.media in (MediaType.AUDIO, MediaType.VIDEO))
+
+    def _position(self, ms: int) -> None:
+        if not self._dragging:
+            self.slider.setValue(ms)
+        self.time.setText(f"{fmt_time(ms / 1000)} / {fmt_time(self.player.duration() / 1000)}")
+
+    def _duration(self, ms: int) -> None:
+        self.slider.setRange(0, max(0, ms))
+
+    def _released(self) -> None:
+        self._dragging = False
+        self.player.setPosition(self.slider.value())
+
+    def _state(self, state) -> None:
+        self.play_btn.setIcon(self._pause_icon if state == QMediaPlayer.PlayingState else self._play_icon)
+
+    def _error(self, error, message: str = "") -> None:
+        self.note.setText("This file cannot be played here (" + (message or "unsupported format") + ").")

@@ -245,10 +245,12 @@ class DopplerProbe(Probe):
                      "ranges")
         regions = [dict(label=f"event {i + 1}: {e['hi']:.0f}→{e['lo']:.0f} Hz near {e['t0']:.0f} s",
                         t0=max(0.0, e["t_start"] - 15), t1=e["t_end"] + 15,
+                        t_play=max(0.0, e["t_start"] - 3),
                         f0=max(20.0, 0.7 * e["lo"]), f1=1.4 * e["hi"])
                    for i, e in enumerate(events)]
         regions += [dict(label=f"weak candidate near {e['t0']:.0f} s",
                          t0=max(0.0, e["t_start"] - 15), t1=e["t_end"] + 15,
+                        t_play=max(0.0, e["t_start"] - 3),
                          f0=max(20.0, 0.7 * e["lo"]), f1=1.4 * e["hi"]) for e in weak]
         return Finding(probe=self.name, detected=True, strength=strength, narrows=0.3,
                        regions=regions,
