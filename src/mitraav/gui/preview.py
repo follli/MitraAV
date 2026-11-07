@@ -12,6 +12,7 @@ from PIL import Image, ImageOps
 from PySide6.QtCore import Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFrame,
     QHBoxLayout,
@@ -29,12 +30,27 @@ from ..core.finding import MediaType
 from ..core.frames import thumbnail
 from .spectro_view import fmt_time
 
-try:                                           # multimedia is optional at runtime
-    from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
-    from PySide6.QtMultimediaWidgets import QVideoWidget
-    HAVE_MEDIA = True
-except Exception:                              # pragma: no cover - depends on the Qt install
-    HAVE_MEDIA = False
+_MEDIA = None
+
+
+def media_modules():
+    """The Qt multimedia classes, imported only when first needed (loading native multimedia
+    libraries can crash on machines without audio or graphics hardware, so nothing touches them
+    until a playable file is opened). False when unavailable."""
+    global _MEDIA
+    if _MEDIA is None:
+        try:
+            from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
+            from PySide6.QtMultimediaWidgets import QVideoWidget
+            _MEDIA = dict(Player=QMediaPlayer, Audio=QAudioOutput, Devices=QMediaDevices, Video=QVideoWidget)
+        except Exception:                      # pragma: no cover - depends on the Qt install
+            _MEDIA = False
+    return _MEDIA
+
+
+def media_available() -> bool:
+    return bool(media_modules())
+
 
 THUMB_W, THUMB_H = 280, 150
 AUDIO_H = 48
@@ -93,7 +109,9 @@ class MediaPreview(QFrame):
         self.path: Path | None = None
         self.media: MediaType | None = None
         self.player = None
-        self._worker: _ThumbWorker | None = None
+        self.audio_out = None
+        self.video = None                              # created on the first Play of a video
+        self._workers: list[_ThumbWorker] = []
         self._dragging = False
 
         self.thumb = QLabel()
@@ -104,10 +122,8 @@ class MediaPreview(QFrame):
         self.audio_page.setAlignment(Qt.AlignCenter)
         self.audio_page.setObjectName("audioglyph")
         self.audio_page.setStyleSheet("font-size: 34px; color: #8e9096;")
-        self.video = QVideoWidget() if HAVE_MEDIA else QLabel()
-        self.video.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)   # its size hint is huge
         self.stack = QStackedWidget()
-        for w in (self.thumb, self.audio_page, self.video):
+        for w in (self.thumb, self.audio_page):
             self.stack.addWidget(w)
 
         self.play_btn = QPushButton()
@@ -138,19 +154,41 @@ class MediaPreview(QFrame):
         lay.addWidget(self.controls)
         lay.addWidget(self.note)
 
-        if HAVE_MEDIA:
-            self.player = QMediaPlayer(self)
-            self.audio_out = QAudioOutput(self)
+        self.slider.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
+        self.slider.sliderReleased.connect(self._released)
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(self._drain_workers)   # never leave a thread running at exit
+        self.clear()
+
+    # --- lazy native pieces ---
+    def _ensure_player(self) -> bool:
+        if self.player:
+            return True
+        m = media_modules()
+        if not m:
+            return False
+        self.player = m["Player"](self)
+        if m["Devices"].audioOutputs():                # no sound card: play silently instead of crashing
+            self.audio_out = m["Audio"](self)
             self.audio_out.setVolume(0.8)
             self.player.setAudioOutput(self.audio_out)
+        self.player.positionChanged.connect(self._position)
+        self.player.durationChanged.connect(self._duration)
+        self.player.playbackStateChanged.connect(self._state)
+        self.player.errorOccurred.connect(self._error)
+        return True
+
+    def _ensure_video(self) -> None:
+        if self.video is None and self._ensure_player():
+            self.video = media_modules()["Video"]()
+            self.video.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)   # its size hint is huge
+            self.stack.addWidget(self.video)
             self.player.setVideoOutput(self.video)
-            self.player.positionChanged.connect(self._position)
-            self.player.durationChanged.connect(self._duration)
-            self.player.playbackStateChanged.connect(self._state)
-            self.player.errorOccurred.connect(self._error)
-            self.slider.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
-            self.slider.sliderReleased.connect(self._released)
-        self.clear()
+
+    def _drain_workers(self) -> None:
+        for w in list(self._workers):
+            w.wait(3000)
 
     # --- loading ---
     def clear(self) -> None:
@@ -184,9 +222,11 @@ class MediaPreview(QFrame):
             self.thumb.setToolTip("Click to play")
             self.stack.setCurrentWidget(self.thumb)
             self.stack.setFixedHeight(THUMB_H)
-            self._worker = _ThumbWorker(self.path)
-            self._worker.done.connect(self._thumb_ready)
-            self._worker.start()
+            worker = _ThumbWorker(self.path)
+            worker.done.connect(self._thumb_ready)
+            worker.finished.connect(lambda w=worker: self._workers.remove(w) if w in self._workers else None)
+            self._workers.append(worker)               # held until it finishes, so it is never destroyed running
+            worker.start()
             self._open_player()
         elif media == MediaType.AUDIO:
             self.stack.setCurrentWidget(self.audio_page)
@@ -197,11 +237,13 @@ class MediaPreview(QFrame):
         self.setVisible(True)
 
     def _open_player(self) -> None:
-        if not self.player:
+        if not self._ensure_player():
             self.controls.setVisible(False)
             self.note.setText("Playback is unavailable (Qt multimedia was not found).")
             return
         self.controls.setVisible(True)
+        if self.audio_out is None:
+            self.note.setText("No audio output device found: playback will be silent.")
         self.player.setSource(QUrl.fromLocalFile(str(self.path)))
 
     def _thumb_ready(self, path: str, img: QImage) -> None:
@@ -219,11 +261,13 @@ class MediaPreview(QFrame):
     def toggle(self) -> None:
         if not self.player or not self.path:
             return
-        if self.player.playbackState() == QMediaPlayer.PlayingState:
+        if self.player.playbackState() == self.player.PlaybackState.PlayingState:
             self.player.pause()
             return
         if self.media == MediaType.VIDEO:
-            self.stack.setCurrentWidget(self.video)
+            self._ensure_video()
+            if self.video is not None:
+                self.stack.setCurrentWidget(self.video)
         self.player.play()
 
     def play_from(self, seconds: float) -> bool:
@@ -231,7 +275,9 @@ class MediaPreview(QFrame):
         if not self.player or not self.path or self.media not in (MediaType.AUDIO, MediaType.VIDEO):
             return False
         if self.media == MediaType.VIDEO:
-            self.stack.setCurrentWidget(self.video)
+            self._ensure_video()
+            if self.video is not None:
+                self.stack.setCurrentWidget(self.video)
         self.player.setPosition(max(0, int(seconds * 1000)))
         self.player.play()
         return True
@@ -252,7 +298,8 @@ class MediaPreview(QFrame):
         self.player.setPosition(self.slider.value())
 
     def _state(self, state) -> None:
-        self.play_btn.setIcon(self._pause_icon if state == QMediaPlayer.PlayingState else self._play_icon)
+        playing = state == self.player.PlaybackState.PlayingState
+        self.play_btn.setIcon(self._pause_icon if playing else self._play_icon)
 
     def _error(self, error, message: str = "") -> None:
         self.note.setText("This file cannot be played here (" + (message or "unsupported format") + ").")

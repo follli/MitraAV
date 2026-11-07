@@ -47,7 +47,8 @@ def test_image_preview_shows_a_thumbnail_and_no_player(tmp_path):
     assert w.isHidden() and w.path is None
 
 
-@pytest.mark.skipif(not pv.HAVE_MEDIA, reason="Qt multimedia not available")
+@pytest.mark.skipif(bool(os.environ.get("CI")) or not pv.media_available(),
+                    reason="real playback needs Qt multimedia and is skipped on headless CI")
 def test_audio_preview_loads_and_seeks(tmp_path):
     _app()
     w = pv.MediaPreview()
@@ -65,7 +66,7 @@ def test_audio_preview_loads_and_seeks(tmp_path):
 
 def test_a_missing_multimedia_backend_degrades_to_a_note(tmp_path, monkeypatch):
     _app()
-    monkeypatch.setattr(pv, "HAVE_MEDIA", False)
+    monkeypatch.setattr(pv, "_MEDIA", False)
     w = pv.MediaPreview()
     w.load(_wav(tmp_path), MediaType.AUDIO)
     assert not w.can_play() and not w.play_from(1.0)
@@ -157,3 +158,13 @@ def test_focus_pill_is_a_column_on_rows_with_a_signal():
     w.focus_ok = False                                                # images have no signal to focus
     w.refresh()
     assert not row("doppler_pass").data(FOCUS_COL, ROLE)
+
+
+def test_no_multimedia_is_loaded_until_a_playable_file_is_opened(tmp_path, monkeypatch):
+    _app()
+    monkeypatch.setattr(pv, "_MEDIA", None)
+    w = pv.MediaPreview()
+    img = tmp_path / "i.png"
+    Image.new("RGB", (32, 32)).save(img)
+    w.load(img, MediaType.IMAGE)
+    assert w.player is None and w.video is None and pv._MEDIA is None
