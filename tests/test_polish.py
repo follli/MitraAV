@@ -35,11 +35,9 @@ def test_pill_colours_and_labels():
     lead = _badge(Finding(probe="c", detected=True, strength=0.9, narrows=0.5, group="Sounds"))
     ctx = _badge(Finding(probe="d", detected=True, quiet=True, pill="hash created"))
     inc = _badge(Finding(probe="e", detected=True, strength=0.9, narrows=0.5, caveat="busy"))
-    assert nothing == ("nothing", C["violet"]) and info == ("info", C["blue"])
+    assert nothing == info == ("info", C["blue"])           # finished-with-nothing looks like info
     assert lead == ("lead", C["green"]) and ctx[0] == "hash created" and inc == ("inconclusive", C["amber"])
-    used = {nothing[1], info[1], lead[1], inc[1]}
-    assert len(used) == 4                                  # no two states share a colour
-    assert C["violet"] not in (C["green"], C["amber"], C["red"], C["cyan"], C["blue"], C["muted"])
+    assert len({info[1], lead[1], inc[1], ctx[1]}) == 4     # lead, info, inconclusive, context all differ
 
 
 def test_inconclusive_is_not_a_lead_or_very_low():

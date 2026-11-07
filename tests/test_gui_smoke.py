@@ -48,7 +48,7 @@ def test_running_and_queued_rows_then_result_replaces_them():
     w.refresh()
     g = w.tree.topLevelItem(0)                      # refresh rebuilds the tree
     kids = {g.child(i).text(0): g.child(i).text(1) for i in range(g.childCount())}
-    assert kids["one"] == "nothing" and kids["two"].startswith("running")
+    assert kids["one"] == "info" and kids["two"].startswith("running")
 
 
 def test_labels_and_very_low_flag():

@@ -41,7 +41,8 @@ LAST_GROUP = "File and metadata"
 
 COLUMN_TIPS = [
     "The probe that ran.",
-    "lead = the probe found something. nothing = it ran and found nothing (not proof of absence).",
+    "lead = the probe found something. info = it ran and found nothing notable (click for details; "
+    "this is not proof of absence).",
     "How clearly the signal is present: clear, likely or faint. This is not how useful it is.",
     "How much a lead would cut down where or what to look at. 'file history only' means it "
     "describes how the file was made, not where it came from.",
@@ -63,8 +64,9 @@ class ScanWorker(QThread):
 
 
 def _badge(f: Finding) -> tuple[str, str]:
-    """Pill text and colour. Colours are only used for results; violet means 'finished, nothing
-    found' and blue means 'information' so neither can be mistaken for a lead or a failure."""
+    """Pill text and colour. Colours are only used for results. Blue means 'information': the probe
+    ran and has something to read (including 'nothing notable'), so it is never mistaken for a lead
+    or a failure, and every row is clickable."""
     if f.status != "ok":
         return f.status.replace("_", " "), C["amber"] if f.status == "not_run" else C["red"]
     if f.inconclusive:
@@ -73,9 +75,7 @@ def _badge(f: Finding) -> tuple[str, str]:
         return f.pill or "context", C["muted"]
     if f.detected:
         return ("lead · very low", C["amber"]) if f.very_low else ("lead", C["green"])
-    if f.info:
-        return f.pill or "info", C["blue"]
-    return "nothing", C["violet"]
+    return f.pill or "info", C["blue"]
 
 
 def _rich(text: str) -> str:
@@ -453,16 +453,12 @@ class MainWindow(QMainWindow):
                     it.setToolTip(0, plain(f.summary) or f.detail)
                     if f.inconclusive:
                         it.setText(3, "busy audio")
-                        it.setForeground(0, QColor(C["muted"]))
                     elif f.detected and f.status == "ok" and f.quiet:
                         it.setText(3, "visible to the eye")
-                        it.setForeground(0, QColor(C["muted"]))
                     elif f.detected and f.status == "ok":
                         it.setText(2, f.confidence_label)
                         it.setData(2, ROLE, f.strength)
                         it.setText(3, f.narrows_label)
-                    else:
-                        it.setForeground(0, QColor(C["muted"]))
                     it.setForeground(3, QColor(C["muted"]))
                 g.addChild(it)
                 if name == keep:
@@ -494,9 +490,9 @@ class MainWindow(QMainWindow):
         if f.inconclusive:
             parts.append("<p><span style=\"color:" + C["amber"] + "\"><b>Inconclusive.</b></span> "
                          + html.escape(f.caveat) + "</p>")
-        if f.info and not f.detected:
-            parts.append("<p class='muted'>Information only: the probe ran and found nothing wrong or "
-                         "unusual. This is not a lead.</p>")
+        if not f.detected and f.status == "ok" and not f.inconclusive:
+            parts.append("<p class='muted'>Information only: the probe ran and found nothing notable. "
+                         "This is not a lead, and it is not proof that nothing is there.</p>")
         if f.summary and " • " in f.summary:
             parts.append("<ul>" + "".join(f"<li>{_rich(seg)}</li>" for seg in f.summary.split(" • ")) + "</ul>")
         else:

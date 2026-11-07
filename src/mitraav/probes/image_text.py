@@ -40,20 +40,21 @@ PHONE = re.compile(r"(?<![\w+])\+\s?(\d{1,3})((?:[\s().-]*\d){6,})")
 DOMAIN = re.compile(r"\b[\w-]+(?:\.[\w-]+)*\.([a-z]{2})(?:\.[a-z]{2})?(?=[/\s,;:]|$)", re.IGNORECASE)
 
 
-def ocr(path: Path) -> tuple[list[tuple[str, int]], str] | None:
-    """Words with confidence, and the raw OSD script line (may be empty). None if no tesseract."""
-    exe = shutil.which("tesseract")
-    if not exe:
-        return None
-    with Image.open(path) as img:
-        img = img.convert("L")
-        if max(img.size) > MAX_SIDE:
-            s = MAX_SIDE / max(img.size)
-            img = img.resize((int(img.width * s), int(img.height * s)))
-        tmp = Path(tempfile.mkdtemp()) / "in.png"
-        img.save(tmp)
-    langs = subprocess.run([exe, "--list-langs"], capture_output=True, text=True).stdout.split()[1:]
-    use = "+".join(sorted(lang for lang in langs if lang not in ("osd", "snum"))) or "eng"
+def scales_for(size: tuple[int, int]) -> list[float]:
+    """Scales to try. Tesseract is picky about letter height, so small pictures are also tried
+    enlarged and very large ones reduced; the best result wins."""
+    big = max(size)
+    out = [min(1.0, MAX_SIDE / big)]
+    if big <= 2200:
+        out.append(min(2.0, MAX_SIDE / big))
+    if big >= 2500:
+        out.append(0.5 * min(1.0, MAX_SIDE / big))
+    return out
+
+
+def _tesseract(exe: str, img: Image.Image, use: str, workdir: Path) -> tuple[list[tuple[str, int]], Path]:
+    tmp = workdir / f"in{img.width}.png"
+    img.save(tmp)
     r = subprocess.run([exe, str(tmp), "stdout", "-l", use, "--psm", "11", "tsv"],
                        capture_output=True, text=True, timeout=120)
     words = []
@@ -65,6 +66,33 @@ def ocr(path: Path) -> tuple[list[tuple[str, int]], str] | None:
             except ValueError:
                 continue
             words.append((parts[11].strip(), conf))
+    return words, tmp
+
+
+def _real_words(words: list[tuple[str, int]]) -> int:
+    return sum(1 for w, c in words if c >= MIN_CONF and w.isalpha() and len(w) >= 3)
+
+
+def ocr(path: Path) -> tuple[list[tuple[str, int]], str] | None:
+    """Words with confidence, and the raw OSD script line (may be empty). None if no tesseract."""
+    exe = shutil.which("tesseract")
+    if not exe:
+        return None
+    langs = subprocess.run([exe, "--list-langs"], capture_output=True, text=True).stdout.split()[1:]
+    use = "+".join(sorted(lang for lang in langs if lang not in ("osd", "snum"))) or "eng"
+    workdir = Path(tempfile.mkdtemp())
+    with Image.open(path) as im:
+        gray = im.convert("L")
+    best: tuple[list[tuple[str, int]], Path] | None = None
+    merged: list[tuple[str, int]] = []
+    for scale in scales_for(gray.size):
+        img = gray if abs(scale - 1.0) < 1e-9 else gray.resize(
+            (max(1, int(gray.width * scale)), max(1, int(gray.height * scale))))
+        got = _tesseract(exe, img, use, workdir)
+        merged += got[0]                                        # different scales read different lines
+        if best is None or _real_words(got[0]) > _real_words(best[0]):
+            best = got
+    words, tmp = merged, best[1]
     script = ""
     if "osd" in langs:
         o = subprocess.run([exe, str(tmp), "stdout", "--psm", "0"], capture_output=True, text=True,
@@ -123,7 +151,7 @@ def clues(words: list[tuple[str, int]]) -> dict:
         best = max(scores, key=scores.get)
         if scores[best] >= 4 and scores[best] >= 2 * sorted(scores.values())[-2]:
             out["language"] = best
-        out["words"] = [t for t in alpha if not PLATE.match(t)][:20]
+        out["words"] = list(dict.fromkeys(t for t in alpha if not PLATE.match(t)))[:20]   # once each
     return out
 
 

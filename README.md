@@ -15,22 +15,6 @@ recognition, no plate reading, no phone numbers or e-mail addresses echoed back)
 
 ### Examples
 
-**A photo of a bluebell wood.** The species probe is consistent with English bluebell
-(*Hyacinthoides non-scripta*, 84%) and links to range maps; the scene type and a reverse-search helper
-sit quietly under "Visual context".
-
-![Image: a species identification with range links](docs/screenshot-image-bluebell.png)
-
-**A photo of a cathedral.** The app declines to name a plant from a building scene (shown as plain
-information, not a lead), and reports the camera tags and how the JPEG was written.
-
-![Image: a building scene where no species is suggested](docs/screenshot-image-cathedral.png)
-
-**A video of a train at a level crossing.** The soundtrack is identified as rail transport, and the
-file-history probes describe the audio and video encoding. Probes that found nothing say so ("nothing").
-
-![Video: soundtrack identification and file history](docs/screenshot-video.png)
-
 **An audio fly-by (synthetic).** Results are grouped by what they tell you; the Doppler probe measures
 speed, closest distance and the time offset between events.
 
@@ -39,8 +23,6 @@ speed, closest distance and the time offset between events.
 **The identified signal**, with labelled axes and a live time and frequency readout.
 
 ![The identified signal, with labelled axes and a live time/frequency readout](docs/screenshot-signal.png)
-
-The screenshots show analysis results only; the photos, video and audio themselves are not included.
 
 ## Status
 

@@ -60,8 +60,8 @@ overlapping chunks, with leading digital silence skipped; file-absolute times ar
 `Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The GUI shows two
 plain-language columns instead: **Confidence** (clear / likely / faint) and **Could narrow**
 (a lot / some / a little; "file history only" for provenance probes). A faint lead is flagged
-"very low"; results from busy audio are "inconclusive"; probes that ran and found nothing wrong are
-"nothing" or "info".
+"very low"; results from busy audio are "inconclusive"; probes that ran and found
+nothing notable show "info" (blue), which, like every other row, can be clicked for details.
 
 ## Add-ons
 

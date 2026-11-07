@@ -6,7 +6,7 @@ COLORS = dict(
     bg="#111214", panel="#1a1b1e", panel2="#242529", line="#35373c",
     text="#e8e8ea", muted="#8e9096", accent="#d6d6d9", accent_hi="#ffffff",
     green="#34d399", cyan="#22d3ee", amber="#fbbf24", red="#f87171",
-    violet="#a78bfa", blue="#60a5fa",     # violet: finished, nothing found. blue: information
+    blue="#60a5fa",                       # information (also the progress bar)
 )
 
 QSS = Template("""
