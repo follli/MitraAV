@@ -114,12 +114,46 @@ def test_clicking_a_play_link_seeks_the_preview(monkeypatch):
     assert got == [42.5]
 
 
-def test_header_has_a_split_open_history_pill_and_focus_signal_button():
+def test_header_has_a_split_open_history_pill_and_no_focus_button():
     from PySide6.QtWidgets import QPushButton
     _app()
     w = MainWindow()
-    assert not hasattr(w, "chip")                                    # the lead-count chip is gone
+    assert not hasattr(w, "chip") and not hasattr(w, "spec_btn")         # chip and header button are gone
     names = {b.text(): b.objectName() for b in w.findChildren(QPushButton)}
     assert names["Open file"] == "segLeft" and names["History"] == "segRight"
-    assert w.spec_btn.text() == "Focus Signal" and "Show signal" not in names
-    assert w.drop.parent() is w.spec_btn.parent()                    # all in the header row
+    assert "Focus Signal" not in names and "Show signal" not in names
+    assert w.drop.parent() is w.findChild(QPushButton, "segLeft").parent()
+
+
+def test_focus_pill_is_a_column_on_rows_with_a_signal():
+    from mitraav.gui.main_window import FOCUS_COL, ROLE
+    _app()
+    w = MainWindow()
+    reg = [dict(label="event 1", t0=5.0, t1=60.0, f0=100.0, f1=500.0)]
+    with_signal = Finding(probe="doppler_pass", group="Aircraft and motion", detected=True, strength=0.9,
+                          narrows=0.4, summary="e", regions=reg)
+    without = Finding(probe="mains_hum", group="Setting and power", detected=True, strength=0.9,
+                      narrows=0.4, summary="h")
+    w.focus_ok = True
+    w.add_finding(with_signal)
+    w.add_finding(without)
+
+    def row(name):
+        for i in range(w.tree.topLevelItemCount()):
+            g = w.tree.topLevelItem(i)
+            for j in range(g.childCount()):
+                if g.child(j).data(0, 0x101) == name:
+                    return g.child(j)
+
+    assert row("doppler_pass").data(FOCUS_COL, ROLE) and not row("mains_hum").data(FOCUS_COL, ROLE)
+    opened = []
+    w.open_spectrogram = lambda regions=None: opened.append(regions)
+    w._item_clicked(row("mains_hum"), FOCUS_COL)                      # no signal: nothing happens
+    w._item_clicked(row("doppler_pass"), 0)                           # other columns do not open it
+    assert opened == []
+    w._item_clicked(row("doppler_pass"), FOCUS_COL)                   # this finding's own signal
+    w._item_double_clicked(row("doppler_pass"), 0)
+    assert opened == [reg, reg]
+    w.focus_ok = False                                                # images have no signal to focus
+    w.refresh()
+    assert not row("doppler_pass").data(FOCUS_COL, ROLE)

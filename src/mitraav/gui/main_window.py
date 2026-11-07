@@ -35,7 +35,8 @@ from .preview import MediaPreview
 from .spectro_view import SpectrogramDialog, fmt_time
 
 C = theme.COLORS
-COLUMNS = ["Probe", "Result", "Confidence", "Could narrow"]
+COLUMNS = ["Probe", "Result", "Confidence", "Could narrow", ""]
+FOCUS_COL = 4
 ROLE = Qt.UserRole
 NAME_ROLE = Qt.UserRole + 1
 LAST_GROUP = "File and metadata"
@@ -47,6 +48,7 @@ COLUMN_TIPS = [
     "How clearly the signal is present: clear, likely or faint. This is not how useful it is.",
     "How much a lead would cut down where or what to look at. 'file history only' means it "
     "describes how the file was made, not where it came from.",
+    "Focus: open the spectrogram on this finding's signal.",
 ]
 EXPLAIN = ("<b>Confidence</b> is how clearly the signal is present. <b>Could narrow</b> is how much "
            "it would cut down where or what to look at. A clear signal can still narrow little.")
@@ -126,6 +128,34 @@ class PillDelegate(QStyledItemDelegate):
         p.restore()
 
 
+class FocusDelegate(QStyledItemDelegate):
+    """A small 'Focus' pill on rows that point at a signal in the recording."""
+
+    def paint(self, p, opt, idx) -> None:
+        _base(self, p, opt, idx)
+        if not idx.data(ROLE):
+            return
+        p.save()
+        p.setRenderHint(QPainter.Antialiasing)
+        r = QRectF(opt.rect).adjusted(6, 9, -14, -9)
+        p.setPen(QColor(C["muted"]))
+        p.setBrush(QColor(C["panel2"]))
+        p.drawRoundedRect(r, r.height() / 2, r.height() / 2)
+        p.setPen(QColor(C["text"]))
+        p.drawText(r, Qt.AlignCenter, "Focus")
+        p.restore()
+
+
+class ProbeTree(QTreeWidget):
+    """The results tree; the pointer becomes a hand over a Focus pill."""
+
+    def mouseMoveEvent(self, e) -> None:
+        idx = self.indexAt(e.position().toPoint())
+        hand = idx.isValid() and idx.column() == FOCUS_COL and bool(idx.data(ROLE))
+        self.viewport().setCursor(Qt.PointingHandCursor if hand else Qt.ArrowCursor)
+        super().mouseMoveEvent(e)
+
+
 class ConfidenceDelegate(QStyledItemDelegate):
     """A short bar for how clearly the signal is present, with its word beside it."""
 
@@ -137,7 +167,7 @@ class ConfidenceDelegate(QStyledItemDelegate):
         col = C["green"] if strength >= 0.7 else C["cyan"] if strength >= 0.4 else C["amber"]
         p.save()
         p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(opt.rect).adjusted(8, 0, -66, 0)
+        r = QRectF(opt.rect).adjusted(8, 0, -58, 0)
         r.setTop(r.center().y() - 4)
         r.setHeight(8)
         p.setPen(Qt.NoPen)
@@ -206,10 +236,6 @@ class MainWindow(QMainWindow):
         open_btn = QPushButton("Open file")
         open_btn.setObjectName("segLeft")
         open_btn.clicked.connect(self.choose_file)
-        self.spec_btn = QPushButton("Focus Signal")
-        self.spec_btn.setObjectName("secondary")
-        self.spec_btn.setEnabled(False)
-        self.spec_btn.clicked.connect(self.open_spectrogram)
         addons_btn = QPushButton("Add-ons")
         addons_btn.setObjectName("secondary")
         addons_btn.clicked.connect(self.open_addons)
@@ -231,7 +257,6 @@ class MainWindow(QMainWindow):
         header.addWidget(self.drop, 1)
         header.addLayout(split)
         header.addWidget(addons_btn)
-        header.addWidget(self.spec_btn)
 
         self.preview = MediaPreview()
 
@@ -239,7 +264,9 @@ class MainWindow(QMainWindow):
         self.progress.setTextVisible(False)
         self.progress.setVisible(False)
 
-        self.tree = QTreeWidget()
+        self.focus_ok = False                            # audio or video: a signal can be shown
+        self.tree = ProbeTree()
+        self.tree.setMouseTracking(True)
         self.tree.setColumnCount(len(COLUMNS))
         self.tree.setHeaderLabels(COLUMNS)
         for i, tip in enumerate(COLUMN_TIPS):
@@ -254,9 +281,14 @@ class MainWindow(QMainWindow):
         hh.setSectionResizeMode(1, QHeaderView.Fixed)
         hh.setSectionResizeMode(2, QHeaderView.Fixed)
         hh.setSectionResizeMode(3, QHeaderView.Stretch)
-        self.tree.setColumnWidth(0, 190)
-        self.tree.setColumnWidth(1, 150)
-        self.tree.setColumnWidth(2, 170)
+        hh.setSectionResizeMode(FOCUS_COL, QHeaderView.Fixed)
+        self.tree.setColumnWidth(0, 180)
+        self.tree.setColumnWidth(1, 140)
+        self.tree.setColumnWidth(2, 112)
+        self.tree.setColumnWidth(FOCUS_COL, 74)
+        self.tree.setItemDelegateForColumn(FOCUS_COL, FocusDelegate(self.tree))
+        self.tree.itemClicked.connect(self._item_clicked)
+        self.tree.itemDoubleClicked.connect(self._item_double_clicked)
         self.tree.setItemDelegateForColumn(1, PillDelegate(self.tree))
         self.tree.setItemDelegateForColumn(2, ConfidenceDelegate(self.tree))
         self.tree.itemSelectionChanged.connect(self.show_detail)
@@ -354,7 +386,7 @@ class MainWindow(QMainWindow):
         self.drop.setToolTip(str(path))
         self.preview.load(path, media_of(path))
         self.detail.setHtml(self._placeholder())
-        self.spec_btn.setEnabled(media_of(path) in (MediaType.AUDIO, MediaType.VIDEO))
+        self.focus_ok = media_of(path) in (MediaType.AUDIO, MediaType.VIDEO)
         if not self.plan:
             self.refresh()
             self.statusBar().showMessage("No probes apply to this file type yet")
@@ -407,11 +439,21 @@ class MainWindow(QMainWindow):
         if self.running:
             self.refresh()
 
-    def open_spectrogram(self) -> None:
+    def _item_clicked(self, item, column: int) -> None:
+        if column == FOCUS_COL and item.data(FOCUS_COL, ROLE):
+            f = self.by_name.get(item.data(0, NAME_ROLE))
+            if f is not None:
+                self.open_spectrogram(f.regions)
+
+    def _item_double_clicked(self, item, column: int) -> None:
+        if column != FOCUS_COL and item.data(FOCUS_COL, ROLE):       # double-click anywhere on the row
+            self._item_clicked(item, FOCUS_COL)
+
+    def open_spectrogram(self, regions: list[dict] | None = None) -> None:
         if not self.path:
             return
         try:
-            dlg = SpectrogramDialog(self.path, self, self._regions())
+            dlg = SpectrogramDialog(self.path, self, self._regions() if regions is None else regions)
         except AudioError as e:
             self.statusBar().showMessage(str(e))
             return
@@ -475,12 +517,12 @@ class MainWindow(QMainWindow):
             font.setBold(True)
             g.setFont(0, font)
             g.setFlags(Qt.ItemIsEnabled)
-            for c in range(4):
+            for c in range(len(COLUMNS)):
                 g.setBackground(c, QColor(C["panel2"]))
             g.setForeground(1, QColor(C["muted"]))
             self.tree.addTopLevelItem(g)
             for name, f in items:
-                it = QTreeWidgetItem([name.replace("_", " "), "", "", ""])
+                it = QTreeWidgetItem([name.replace("_", " "), "", "", "", ""])
                 it.setData(0, NAME_ROLE, name)
                 if f is None:
                     running = name == self.running
@@ -492,6 +534,9 @@ class MainWindow(QMainWindow):
                     it.setText(1, label)
                     it.setData(1, ROLE, color)
                     it.setToolTip(0, plain(f.summary) or f.detail)
+                    if f.regions and self.focus_ok and f.status == "ok":
+                        it.setData(FOCUS_COL, ROLE, True)
+                        it.setToolTip(FOCUS_COL, "Open the spectrogram on this finding's signal")
                     if f.inconclusive:
                         it.setText(3, "busy audio")
                     elif f.detected and f.status == "ok" and f.quiet:
