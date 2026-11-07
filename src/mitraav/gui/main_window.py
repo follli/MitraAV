@@ -462,7 +462,10 @@ class MainWindow(QMainWindow):
             return
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.setWindowFlag(Qt.Window, True)                 # its own window: several can stay open
-        self._detail_windows = [w for w in getattr(self, "_detail_windows", []) if w.isVisible()] + [dlg]
+        if not hasattr(self, "_detail_windows"):
+            self._detail_windows = []
+        self._detail_windows.append(dlg)                   # closed windows delete themselves: drop them on destroy
+        dlg.destroyed.connect(lambda _=None, d=dlg: self._detail_windows.remove(d) if d in self._detail_windows else None)
         dlg.show()
 
     def _link_clicked(self, url) -> None:
@@ -579,8 +582,7 @@ class MainWindow(QMainWindow):
             parts.append(f"<p><b>Confidence:</b> {f.confidence_label} &nbsp; "
                          f"<b>Could narrow:</b> {f.narrows_label}</p>")
             if f.very_low:
-                parts.append("<p><span style=\"color:" + C["amber"] + "\"><b>Very low lead.</b></span> "
-                             "Glance at it, but don't follow it up unless something else agrees.</p>")
+                parts.append("<p><span style=\"color:" + C["amber"] + "\"><b>Very low lead.</b></span></p>")
         if f.inconclusive:
             parts.append("<p><span style=\"color:" + C["amber"] + "\"><b>Inconclusive.</b></span> "
                          + html.escape(f.caveat) + "</p>")

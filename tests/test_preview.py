@@ -178,5 +178,10 @@ def test_several_details_windows_can_be_open_at_once(tmp_path):
     w.open_spectrogram(reg)
     w.open_spectrogram(reg)
     assert len(w._detail_windows) == 2 and all(d.isVisible() for d in w._detail_windows)
-    for d in w._detail_windows:
+    for d in list(w._detail_windows):
+        d.close()
+    _wait(100)
+    w.open_spectrogram(reg)                            # reopening after closing must not raise
+    assert len(w._detail_windows) <= 2
+    for d in list(w._detail_windows):
         d.close()
