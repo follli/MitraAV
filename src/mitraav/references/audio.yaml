@@ -1,0 +1,101 @@
+enf:
+  - name: NESO (UK) grid data
+    url: https://www.neso.energy
+    note: UK grid frequency history; compare against frequency extracted from the recording.
+  - name: ENTSO-E Transparency Platform
+    url: https://transparency.entsoe.eu
+    note: Continental Europe grid data; check which synchronous area the claimed place belongs to.
+  - name: Mains frequency by country
+    url: https://en.wikipedia.org/wiki/Mains_electricity_by_country
+    note: 50 vs 60 Hz regions, including mixed ones such as Japan (50 Hz east, 60 Hz west).
+  - name: ENF analysis literature
+    note: Search "electric network frequency criterion"; bandpass around a harmonic, then correlate with logged data.
+
+doppler:
+  - name: OpenSky Network
+    url: https://opensky-network.org
+    note: Historical ADS-B tracks (free account). Needs a rough location and time.
+  - name: ADS-B Exchange
+    url: https://globe.adsbexchange.com
+    note: Unfiltered tracks with history playback; look for a pass near the recording point.
+  - name: FlightAware / Flightradar24 history
+    url: https://www.flightradar24.com
+    note: Past flights near a point; free tiers limit how far back you can look.
+  - name: Doppler effect
+    url: https://en.wikipedia.org/wiki/Doppler_effect
+    note: The ratio of approach to recede pitch gives source speed.
+  - name: ICAO aircraft type designators (Doc 8643)
+    url: https://www.icao.int/publications/DOC8643/Pages/default.aspx
+    note: Map ADS-B type codes to propeller vs jet so you can filter flights before matching.
+  - name: Copernicus DEM / SRTM elevation
+    url: https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model
+    note: ADS-B altitude is above sea level; subtract ground elevation to get true slant distance.
+  - name: ADS-B Exchange historical data
+    url: https://www.adsbexchange.com/products/historical-data/
+    note: Bulk daily track files for a whole-region time-offset search.
+
+tones:
+  - name: ITU-T E.180 supplement (tones by country)
+    url: https://www.itu.int/rec/T-REC-E.180
+    note: Official national dial, busy and ringback tone frequencies and cadences.
+  - name: Telephone tones
+    url: https://en.wikipedia.org/wiki/Telephone_tones
+    note: Overview with country tables; cross-check the cadence, not just the frequency.
+  - name: Emergency Alert System
+    url: https://en.wikipedia.org/wiki/Emergency_Alert_System
+    note: US attention signal and SAME data bursts; confirms US broadcast origin.
+  - name: NOAA Weather Radio
+    url: https://www.weather.gov/nwr/
+    note: Station list and coverage areas; the 1050 Hz tone plus a station narrows the region.
+
+bells:
+  - name: Dove's Guide for Church Bell Ringers
+    url: https://dove.cccbr.org.uk
+    note: UK (and some overseas) rings with tower location, tenor weight and note, and nominal frequency for many; filter by note and number of bells.
+  - name: Central Council of Church Bell Ringers
+    url: https://cccbr.org.uk
+    note: Background on ring tuning, bell terminology and tower records.
+  - name: Bell partials (strike note, hum, prime, tierce, quint, nominal)
+    url: https://en.wikipedia.org/wiki/Strike_tone
+    note: Explains why the nominal and the perceived strike note differ; compare the right one.
+
+birds:
+  - name: BirdNET
+    url: https://birdnet.cornell.edu
+    note: The model behind these scores; check its confidence notes and supported species.
+  - name: Xeno-canto
+    url: https://xeno-canto.org
+    note: Crowd-sourced recordings with locations; compare calls and see recorded ranges.
+  - name: Macaulay Library
+    url: https://www.macaulaylibrary.org
+    note: Cornell archive of audio and video with location and date metadata.
+  - name: eBird species maps
+    url: https://ebird.org/explore
+    note: Range and seasonal abundance by species; intersect several species to narrow the region and season.
+
+provenance:
+  - name: Sonic Visualiser
+    url: https://www.sonicvisualiser.org
+    note: Free spectrogram viewer with layers and annotation; confirm cut-offs and splices by eye.
+  - name: Audacity
+    url: https://www.audacityteam.org
+    note: Free editor with a spectrogram view and a precise sample-level zoom for gaps and cuts.
+  - name: MediaInfo
+    url: https://mediaarea.net/en/MediaInfo
+    note: Container and codec details (original encoder, bitrate, sample rate history).
+
+sirens:
+  - name: Siren (alarm)
+    url: https://en.wikipedia.org/wiki/Siren_(alarm)
+    note: Types of sirens and their sound patterns; compare measured pitches and cycle times.
+  - name: Emergency vehicle lighting and sirens
+    url: https://en.wikipedia.org/wiki/Emergency_vehicle_lighting
+    note: Overview of emergency vehicle warning devices; country conventions differ.
+
+reverb:
+  - name: Reverberation time (RT60)
+    url: https://en.wikipedia.org/wiki/Reverberation
+    note: Typical values by space type; compare with the estimate and the visible setting.
+  - name: Acoustic Characteristics of spaces
+    url: https://en.wikipedia.org/wiki/Architectural_acoustics
+    note: Background on how room size and materials set reverberation.

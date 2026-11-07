@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mitraav"
+version = "0.2.0"
+description = "Local first-step OSINT lead finder: cheap, offline probes on audio, image and video files"
+keywords = ["osint", "geolocation", "audio", "forensics", "doppler", "provenance"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: X11 Applications :: Qt",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE.md"]
+authors = [{ name = "Follli" }]
+requires-python = ">=3.11"
+dependencies = ["PySide6>=6.6", "numpy>=1.24", "scipy>=1.10", "Pillow>=10", "PyYAML>=6"]
+
+[project.urls]
+Homepage = "https://github.com/follli/MitraAV"
+Repository = "https://github.com/follli/MitraAV"
+Issues = "https://github.com/follli/MitraAV/issues"
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "build", "twine"]
+sound = ["ai-edge-litert"]
+birds = ["birdnet>=1.4"]
+nature = ["pybioclip>=2"]            # heavy: install the CPU build of torch first (see mitraav-setup)
+all = ["ai-edge-litert", "birdnet>=1.4"]
+
+[project.gui-scripts]
+mitraav = "mitraav.gui.app:main"
+
+[project.scripts]
+mitraav-scan = "mitraav.cli:main"
+mitraav-setup = "mitraav.setup_models:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mitraav = ["references/*.yaml", "references/*.txt"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+ignore = ["UP042"]      # MediaType(str, Enum) is kept: StrEnum changes str()/format() output
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,46 @@
+rail:
+  - name: Train horn
+    url: https://en.wikipedia.org/wiki/Train_horn
+    note: Horn types and chord patterns differ by country and operator; compare note and pattern.
+bells:
+  - name: Dove's Guide for Church Bell Ringers
+    url: https://dove.cccbr.org.uk
+    note: UK (and some overseas) rings by tower; see also the church_bells probe for pitch.
+  - name: Church bell
+    url: https://en.wikipedia.org/wiki/Church_bell
+    note: Background on bell types, tuning and ringing.
+sirens:
+  - name: Siren (alarm)
+    url: https://en.wikipedia.org/wiki/Siren_(alarm)
+    note: Siren types and patterns; see also the siren_pattern probe for measured pitches.
+aircraft:
+  - name: OpenSky Network
+    url: https://opensky-network.org
+    note: Historical ADS-B tracks; needs a rough location and time.
+  - name: ADS-B Exchange
+    url: https://globe.adsbexchange.com
+    note: Unfiltered flight tracks with history playback.
+road:
+  - name: Vehicle horn
+    url: https://en.wikipedia.org/wiki/Vehicle_horn
+    note: Horn pitch and usage conventions vary by country and vehicle type.
+water:
+  - name: Fog signal
+    url: https://en.wikipedia.org/wiki/Fog_signal
+    note: Foghorns and other maritime sound signals; patterns identify stations.
+weather:
+  - name: Meteostat
+    url: https://meteostat.net
+    note: Historical weather by station; compare wind, rain or thunder with the claimed date and place.
+birds:
+  - name: Xeno-canto
+    url: https://xeno-canto.org
+    note: Compare calls and see where a species is recorded; see also the birdsong probe.
+animals:
+  - name: Macaulay Library
+    url: https://www.macaulaylibrary.org
+    note: Cornell archive of animal audio and video with location and date metadata.
+music:
+  - name: AcoustID
+    url: https://acoustid.org
+    note: Open audio fingerprint lookup for identifying recorded music.

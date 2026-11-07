@@ -1,0 +1,118 @@
+# Small lookup tables for text clues. Calling codes and country-code domains are matched on a
+# phone number's prefix or a web address's ending; matches are hints, not proof (businesses, VoIP
+# and global services use foreign codes and domains).
+calling_codes:
+  "1": the US, Canada or another NANP country
+  "7": Russia or Kazakhstan
+  "20": Egypt
+  "27": South Africa
+  "30": Greece
+  "31": the Netherlands
+  "32": Belgium
+  "33": France
+  "34": Spain
+  "36": Hungary
+  "39": Italy
+  "40": Romania
+  "41": Switzerland
+  "43": Austria
+  "44": the United Kingdom
+  "45": Denmark
+  "46": Sweden
+  "47": Norway
+  "48": Poland
+  "49": Germany
+  "51": Peru
+  "52": Mexico
+  "53": Cuba
+  "54": Argentina
+  "55": Brazil
+  "56": Chile
+  "57": Colombia
+  "58": Venezuela
+  "60": Malaysia
+  "61": Australia
+  "62": Indonesia
+  "63": the Philippines
+  "64": New Zealand
+  "65": Singapore
+  "66": Thailand
+  "81": Japan
+  "82": South Korea
+  "84": Vietnam
+  "86": China
+  "90": Turkey
+  "91": India
+  "92": Pakistan
+  "94": Sri Lanka
+  "98": Iran
+  "212": Morocco
+  "234": Nigeria
+  "254": Kenya
+  "351": Portugal
+  "353": Ireland
+  "358": Finland
+  "380": Ukraine
+  "420": the Czech Republic
+  "971": the United Arab Emirates
+  "972": Israel
+cctlds:
+  uk: the United Kingdom
+  de: Germany
+  fr: France
+  es: Spain
+  it: Italy
+  nl: the Netherlands
+  be: Belgium
+  ch: Switzerland
+  at: Austria
+  se: Sweden
+  no: Norway
+  dk: Denmark
+  fi: Finland
+  pl: Poland
+  cz: the Czech Republic
+  pt: Portugal
+  ie: Ireland
+  gr: Greece
+  tr: Turkey
+  ru: Russia
+  ua: Ukraine
+  jp: Japan
+  cn: China
+  kr: South Korea
+  in: India
+  au: Australia
+  nz: New Zealand
+  ca: Canada
+  mx: Mexico
+  br: Brazil
+  ar: Argentina
+  cl: Chile
+  co: Colombia
+  za: South Africa
+  eg: Egypt
+  ae: the United Arab Emirates
+  il: Israel
+  sg: Singapore
+  my: Malaysia
+  id: Indonesia
+  th: Thailand
+  ph: the Philippines
+  vn: Vietnam
+currencies:
+  "£": the United Kingdom (pound sterling)
+  "€": the euro area
+  "¥": Japan or China (yen or yuan)
+  "₹": India (rupee)
+  "₩": South Korea (won)
+  "₽": Russia (rouble)
+  "₺": Turkey (lira)
+  "zł": Poland (zloty)
+  "Kč": the Czech Republic (koruna)
+  "CHF": Switzerland (franc)
+  "R$": Brazil (real)
+units:
+  mph: the US or the UK (miles per hour)
+  "km/h": a metric-system country
+  "°F": the US (Fahrenheit)

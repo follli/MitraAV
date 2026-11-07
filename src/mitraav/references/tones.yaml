@@ -1,0 +1,65 @@
+# Known signal tones the signal_tones probe matches against. Frequencies are nominal; real
+# equipment drifts a little. Verify against the cited standard before relying on a match.
+# pattern: continuous | cadenced | any.  burst/gap: nominal on and off seconds.
+tones:
+  - name: North American dial tone
+    freqs: [350, 440]
+    pattern: continuous
+    where: US, Canada and other NANP countries
+  - name: North American busy signal
+    freqs: [480, 620]
+    pattern: cadenced
+    burst: 0.5
+    gap: 0.5
+    where: US, Canada and other NANP countries
+  - name: North American ringback
+    freqs: [440, 480]
+    pattern: cadenced
+    burst: 2.0
+    gap: 4.0
+    where: US, Canada and other NANP countries
+  - name: UK dial tone
+    freqs: [350, 450]
+    pattern: continuous
+    where: United Kingdom
+  - name: UK ringing tone
+    freqs: [400, 450]
+    pattern: cadenced
+    where: United Kingdom (double-burst cadence)
+  - name: UK busy tone
+    freqs: [400]
+    pattern: cadenced
+    burst: 0.375
+    gap: 0.375
+    where: United Kingdom (400 Hz is shared with other countries)
+    specific: false
+  - name: 425 Hz telephone tones
+    freqs: [425]
+    pattern: any
+    where: Germany, Italy, Spain, Netherlands and many other European countries
+    specific: false
+  - name: French dial tone
+    freqs: [440]
+    pattern: continuous
+    where: France (440 Hz is shared with other systems)
+    specific: false
+  - name: Japanese dial and busy tones
+    freqs: [400]
+    pattern: any
+    where: Japan (400 Hz is shared with other countries)
+    specific: false
+  - name: Chinese telephone tones
+    freqs: [450]
+    pattern: any
+    where: China (450 Hz coincides with the 9th harmonic of 50 Hz mains)
+    specific: false
+  - name: NOAA Weather Radio alert tone
+    freqs: [1050]
+    pattern: continuous
+    min_dur: 5
+    where: US (broadcast on NOAA Weather Radio, roughly 8-10 s before an alert)
+  - name: Emergency Alert System attention signal
+    freqs: [853, 960]
+    pattern: continuous
+    min_dur: 5
+    where: US broadcast radio and TV (EAS, roughly 8-25 s)

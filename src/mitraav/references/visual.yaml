@@ -1,0 +1,49 @@
+street:
+  - name: GeoMastr - bollards by country
+    url: https://geomastr.com/bollards
+    note: Community guide to national bollard designs. Quality varies; cross-check with other sources.
+  - name: GeoMetas - utility poles
+    url: https://geometas.com/metas/categories/poles
+    note: Community guide to pole shapes, materials and crossarms by region. Quality varies.
+  - name: Left- and right-hand traffic
+    url: https://en.wikipedia.org/wiki/Left-_and_right-hand_traffic
+    note: Which side of the road each country drives on, with a map.
+  - name: Vehicle registration plates
+    url: https://en.wikipedia.org/wiki/Vehicle_registration_plate
+    note: Plate colours and formats by country. Compare the style only; this tool never reads plates.
+  - name: Geolocation methods (Exposing the Invisible)
+    url: https://kit.exposingtheinvisible.org/en/geolocation.html
+    note: Step-by-step guide to matching a picture to a place.
+worship:
+  - name: Church architecture
+    url: https://en.wikipedia.org/wiki/Church_architecture
+    note: Styles by period and region; compare towers, windows and plans.
+  - name: Mosque
+    url: https://en.wikipedia.org/wiki/Mosque
+    note: Regional mosque forms (minarets, domes) and how they differ.
+  - name: Buddhist temple
+    url: https://en.wikipedia.org/wiki/Buddhist_temple
+    note: Regional temple and pagoda forms across Asia.
+reverse:
+  - name: Google Lens
+    url: https://lens.google.com
+    note: Upload the picture yourself for a visual match; nothing is sent from this tool.
+  - name: Yandex Images
+    url: https://yandex.com/images/
+    note: Often strongest for buildings and places outside the Anglophone web.
+  - name: TinEye
+    url: https://tineye.com
+    note: Finds copies and earlier uses of the same image.
+  - name: Bing Visual Search
+    url: https://www.bing.com/visualsearch
+    note: A further visual match to compare against.
+  - name: InVID-WeVerify verification plugin
+    url: https://www.invid-project.eu/tools-and-services/invid-verification-plugin/
+    note: Keyframes and reverse search together, built for verifying images and video.
+nature:
+  - name: Koppen climate classification
+    url: https://en.wikipedia.org/wiki/K%C3%B6ppen_climate_classification
+    note: Climate zones with a world map; compare vegetation and terrain.
+  - name: Biome
+    url: https://en.wikipedia.org/wiki/Biome
+    note: Terrestrial biomes and typical vegetation.

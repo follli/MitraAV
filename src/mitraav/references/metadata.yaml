@@ -1,0 +1,36 @@
+gps:
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Full tag dump; check for edited or inconsistent GPS fields.
+datetime:
+  - name: SunCalc
+    url: https://www.suncalc.org
+    note: Check that shadows and sun position fit the claimed capture time.
+  - name: Meteostat
+    url: https://meteostat.net
+    note: Compare the weather in the image with the historical record for that place and date.
+camera:
+  - name: Manufacturer model pages
+    note: Check the model's release year against the claimed date.
+
+jpeg:
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Full tag dump including XMP history, maker notes and ICC profile.
+  - name: JPEGsnoop
+    url: https://github.com/ImpulseAdventure/JPEGsnoop
+    note: Detailed JPEG table, scan and encoder analysis; compare tables against known cameras and editors.
+  - name: FotoForensics
+    url: https://fotoforensics.com
+    note: Error level analysis and metadata viewer (uploads the image, so check privacy first). Error level analysis gives false positives on re-saved files.
+
+text:
+  - name: Tesseract language packs
+    url: https://tesseract-ocr.github.io/tessdoc/Data-Files.html
+    note: Install a pack for each language you expect to read; script detection works without them.
+  - name: List of country calling codes
+    url: https://en.wikipedia.org/wiki/List_of_country_calling_codes
+    note: Check a phone prefix against the full list, including shared and special-use codes.
+  - name: Country code top-level domains
+    url: https://en.wikipedia.org/wiki/Country_code_top-level_domain
+    note: Many ccTLDs are repurposed (.tv, .io, .co); do not read them as location alone.

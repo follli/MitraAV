@@ -1,0 +1,18 @@
+provenance:
+  - name: InVID-WeVerify verification plugin
+    url: https://www.invid-project.eu/tools-and-services/invid-verification-plugin/
+    note: Keyframes, metadata and reverse search for video; treat matches as leads.
+  - name: MediaInfo
+    url: https://mediaarea.net/en/MediaInfo
+    note: Full container and codec listing; compare handler and encoder tags with known platform output.
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Full metadata dump including QuickTime and vendor tags.
+
+flicker:
+  - name: Mains electricity by country
+    url: https://en.wikipedia.org/wiki/Mains_electricity_by_country
+    note: 50 vs 60 Hz regions, including mixed ones such as Japan (50 Hz east, 60 Hz west).
+  - name: Flicker banding and rolling shutter
+    url: https://en.wikipedia.org/wiki/Flicker_(screen)
+    note: Why lamp flicker shows as bands or pulsing in video; useful for checking an alias match by eye.
