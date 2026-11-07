@@ -30,7 +30,15 @@ def test_not_run_without_package(tmp_path, monkeypatch):
     assert f.status == "not_run" and "Add-ons" in f.detail and "--install birds" in f.detail
 
 
+def _pretend_installed(monkeypatch, *names):
+    """Make find_spec report these packages as installed, whatever the machine has."""
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec",
+                        lambda name, *a, **k: object() if name in names else real(name, *a, **k))
+
+
 def test_not_run_without_model(tmp_path, monkeypatch):
+    _pretend_installed(monkeypatch, "birdnet")        # CI has no BirdNET; the package check comes first
     monkeypatch.setattr(birds, "model_path", lambda: tmp_path / "missing.tflite")
     f = BirdProbe().run(tmp_path / "x.wav")
     assert f.status == "not_run" and "never download" in f.detail

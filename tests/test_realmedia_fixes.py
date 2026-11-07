@@ -100,6 +100,10 @@ def test_species_guess_is_withheld_for_a_building_scene(tmp_path, monkeypatch):
     names, _ = st.load_labels()
     p = np.zeros(365)
     p[names.index("tower")] = 0.6
+    import importlib.util
+    real = importlib.util.find_spec                    # the gate skips itself without a LiteRT runtime
+    monkeypatch.setattr(importlib.util, "find_spec",
+                        lambda name, *a, **k: object() if name == "ai_edge_litert" else real(name, *a, **k))
     monkeypatch.setattr(st, "classify", lambda path, mp: p)
     monkeypatch.setattr("mitraav.core.models.places_path", lambda: Path(__file__))   # "exists"
     img = tmp_path / "cathedral.png"
