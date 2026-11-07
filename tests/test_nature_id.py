@@ -80,3 +80,8 @@ def test_low_scores_not_a_lead(img, monkeypatch):
     _ready(monkeypatch, [dict(kingdom="Plantae", genus="A", species="A a", score=0.2),
                          dict(kingdom="Plantae", genus="B", species="B b", score=0.15)])
     assert not ni.NatureIdProbe().run(img).detected
+
+
+def test_nature_id_also_runs_on_video_frames():
+    from mitraav.probes.nature_id import NatureIdProbe
+    assert NatureIdProbe.frames_ok

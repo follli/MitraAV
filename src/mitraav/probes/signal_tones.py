@@ -136,6 +136,93 @@ def describe(m: dict) -> str:
     return s
 
 
+NOTES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+MEASURE_PROM = 18.0      # unmatched tones must stand well clear of the floor
+MEASURE_RANGE_DB = 30.0  # ... and be within this many dB of the strongest tone
+MAX_TONES = 6            # more distinct pitches than this is music, speech or noise, not a signal
+
+
+def note_name(f: float) -> str:
+    m = int(round(69 + 12 * np.log2(f / 440.0)))
+    return f"{NOTES[m % 12]}{m // 12 - 1}"
+
+
+def _fundamentals(lines: list[Line]) -> list[tuple[Line, int]]:
+    """Lines that are not an overtone (2x..6x) of a lower simultaneous line, with how many overtones
+    each has: a struck chime or beeper is one pitch with a harmonic stack, not several tones."""
+    out = []
+    for ln in lines:
+        is_partial = False
+        for m in lines:
+            if m.f >= ln.f:
+                continue
+            ov = min(m.t1, ln.t1) - max(m.t0, ln.t0)
+            if ov >= 0.5 * min(ln.t1 - ln.t0, m.t1 - m.t0) and any(abs(ln.f - k * m.f) <= 0.015 * ln.f for k in range(2, 7)):
+                is_partial = True
+                break
+        if not is_partial:
+            n = sum(1 for o in lines if o.f > ln.f and min(o.t1, ln.t1) - max(o.t0, ln.t0) >= 0.5 * min(o.t1 - o.t0, ln.t1 - ln.t0)
+                    and any(abs(o.f - k * ln.f) <= 0.015 * o.f for k in range(2, 7)))
+            out.append((ln, n))
+    return out
+
+
+def measure_tones(lines: list[Line]) -> list[dict]:
+    """Stable tones that match no table entry: one entry per pitch (within 1.5%), overtones folded
+    into their fundamental, with how often it sounded and its on/off timing. Empty unless there is
+    evidence of a deliberate signal (repeated, or a structured tone with overtones) and not so many
+    pitches that it is music, speech or noise."""
+    cands = [ln for ln in lines if not ln.constant]
+    funds = [(ln, n) for ln, n in _fundamentals(cands) if ln.prom >= MEASURE_PROM]
+    if not funds:
+        return []
+    top = max(ln.level for ln, _ in funds)
+    funds = [(ln, n) for ln, n in funds if ln.level >= top - MEASURE_RANGE_DB]
+    pitches: list[dict] = []
+    for ln, n in sorted(funds, key=lambda x: x[0].f):
+        if pitches and abs(ln.f - pitches[-1]["f"]) <= 0.015 * ln.f:
+            c = pitches[-1]
+            c["lines"].append(ln)
+            c["partials"] = max(c["partials"], n)
+            c["f"] = float(np.mean([m.f for m in c["lines"]]))
+        else:
+            pitches.append(dict(f=ln.f, lines=[ln], partials=n))
+    if len(pitches) > MAX_TONES:
+        return []
+    bursts = sum(len(c["lines"]) for c in pitches)
+    if bursts < 2 and not any(c["partials"] for c in pitches):
+        return []                                   # one bare tone: too easily a whine or whistle
+    out = []
+    for c in pitches:
+        ls = sorted(c["lines"], key=lambda m: m.t0)
+        on = float(np.median([m.t1 - m.t0 for m in ls]))
+        off = float(np.median([b.t0 - a.t1 for a, b in zip(ls, ls[1:])])) if len(ls) > 1 else None
+        out.append(dict(f=c["f"], n=len(ls), t0=ls[0].t0, t1=ls[-1].t1, on=on, off=off,
+                        partials=c["partials"], level=max(m.level for m in ls)))
+    return sorted(out, key=lambda c: c["t0"])                 # in order of sounding: a chime's pitch sequence
+
+
+def measured_finding(name: str, tones: list[dict]) -> Finding:
+    parts = []
+    for c in tones[:4]:
+        pulse = ""
+        if c["n"] > 1 and c["off"] is not None:
+            pulse = f", {c['n']} bursts of about {c['on']:.2f} s with about {max(c['off'], 0):.2f} s gaps"
+        elif c["n"] == 1:
+            pulse = f", one tone of about {c['on']:.1f} s"
+        parts.append(f"**{c['f']:.0f} Hz ({note_name(c['f'])})** near {c['t0']:.0f} s{pulse}")
+    strength = min(0.45, 0.2 + 0.05 * min(sum(c["n"] for c in tones), 5))
+    regions = [dict(label=f"tone {c['f']:.0f} Hz near {c['t0']:.0f} s", t0=max(0.0, c["t0"] - 2),
+                    t1=c["t1"] + 2, f0=0.8 * c["f"], f1=1.2 * c["f"]) for c in tones[:3]]
+    return Finding(
+        probe=name, detected=True, strength=strength, narrows=0.1, constrains=["source type"], effort=2,
+        regions=regions, follow_ups=follow_ups("audio", "tones"),
+        summary="stable tone" + ("s" if len(tones) > 1 else "") + " measured: " + "; ".join(parts)
+        + ". Not in the telephone or emergency-alert table, so this is a measured pitch pattern, "
+          "consistent with a beeper, chime or alert (lift, door, appliance, vehicle). Compare the "
+          "pitch and rhythm with recordings of the suspected device.")
+
+
 class SignalTonesProbe(Probe):
     name = "signal_tones"
     group = "Sounds"
@@ -161,6 +248,9 @@ class SignalTonesProbe(Probe):
         groups = group_simultaneous(dedupe(lines))
         matches = [m for e in _load("tones").get("tones", []) if (m := match_entry(e, groups))]
         if not matches:
+            measured = measure_tones(dedupe(lines))
+            if measured:
+                return measured_finding(self.name, measured)
             return Finding(
                 probe=self.name, detected=False,
                 summary="No stable tone signature matched the telephone or emergency-alert "

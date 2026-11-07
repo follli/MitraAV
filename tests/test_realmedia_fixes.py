@@ -127,7 +127,8 @@ def test_a_siren_with_harmonics_is_not_a_telephone_tone(tmp_path):
     bursts = ((t % 6) < 3).astype(float)
     x = sum(a * np.sin(2 * np.pi * k * 425 * t) for k, a in ((1, 1.0), (2, 0.5), (3, 0.35), (4, 0.2))) * bursts
     x = x + 0.01 * np.random.default_rng(0).standard_normal(t.size)
-    assert not SignalTonesProbe().run(_write(tmp_path, x, sr)).detected
+    f = SignalTonesProbe().run(_write(tmp_path, x, sr))
+    assert "telephone" not in f.summary                  # a harmonic horn is measured, never matched to the table
     pure = np.sin(2 * np.pi * 425 * t) * bursts + 0.01 * np.random.default_rng(0).standard_normal(t.size)
     assert SignalTonesProbe().run(_write(tmp_path, pure, sr, "pure.wav")).detected      # a pure tone still matches
 

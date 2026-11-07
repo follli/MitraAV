@@ -30,7 +30,9 @@ IGNORE = ("silence", "noise", "static", "white noise", "pink noise", "hum")
 # (key, display name, label keywords, relevance for locating or identifying a recording)
 CATEGORIES = [
     ("rail", "Rail", ("train", "railroad", "rail transport", "subway", "metro", "tram", "locomotive"), True),
-    ("bells", "Bells and chimes", ("bell", "chime", "campanology", "carillon"), True),
+    ("bells", "Bells and chimes", ("bell", "chime", "campanology", "carillon", "doorbell", "ding", "glockenspiel",
+                                    "mallet percussion", "marimba", "vibraphone", "tuning fork", "music box",
+                                    "beep"), True),
     ("sirens", "Sirens and alarms", ("siren", "alarm", "ambulance", "police car", "fire engine",
                                       "civil defense", "buzzer", "smoke detector"), True),
     ("aircraft", "Aircraft", ("aircraft", "airplane", "helicopter", "jet engine", "propeller"), True),

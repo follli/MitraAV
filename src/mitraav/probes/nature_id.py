@@ -50,7 +50,7 @@ class NatureIdProbe(Probe):
     name = "nature_id"
     group = "Living things"
     media = (MediaType.IMAGE,)
-    frames_ok = False        # loading the model per video frame would be wasteful
+    frames_ok = True         # video: the sampled frames are classified one by one (slow: a model load each)
     timeout = 300.0
 
     def run(self, path: Path) -> Finding:
