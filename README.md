@@ -2,7 +2,7 @@
 
 A local, first-step OSINT lead finder. Drop an image, audio or video file into the app. Many cheap
 "probes" each test whether an identifying signal is present, say plainly what they found (or that
-they found nothing), and point to public tools and references for the follow-up.
+they found nothing), and point to public tools and **points you to your next step**.
 
 It is triage: it measures signals and names what it can, offline. It is **not** a solver, it makes
 **no network calls during a scan**, and it is not for identifying private individuals (no face
