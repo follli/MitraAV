@@ -63,7 +63,7 @@ mitraav-scan file [--json]      # the same probes from the command line
 Results are grouped. **Confidence** says how clearly a signal is present (clear, likely, faint);
 **Could narrow** says how much a lead would cut down where or what to look at. "Context" rows
 (scene type, reverse-search helper) only report what you could see yourself and are folded away.
-Rows that point at a signal in a recording have a **Focus** button: it opens the spectrogram on that
+Rows that point at a signal in a recording have a **Details** button: it opens the spectrogram on that
 finding's signal. History (next to Open file) lists earlier scans.
 
 The file you dropped stays in view: images show a thumbnail (click to enlarge), videos show a frame

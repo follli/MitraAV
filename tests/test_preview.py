@@ -126,7 +126,7 @@ def test_header_has_a_split_open_history_pill_and_no_focus_button():
     assert w.drop.parent() is w.findChild(QPushButton, "segLeft").parent()
 
 
-def test_focus_pill_is_a_column_on_rows_with_a_signal():
+def test_details_pill_is_a_column_on_rows_with_a_signal():
     from mitraav.gui.main_window import FOCUS_COL, ROLE
     _app()
     w = MainWindow()
@@ -168,3 +168,15 @@ def test_no_multimedia_is_loaded_until_a_playable_file_is_opened(tmp_path, monke
     Image.new("RGB", (32, 32)).save(img)
     w.load(img, MediaType.IMAGE)
     assert w.player is None and w.video is None and pv._MEDIA is None
+
+
+def test_several_details_windows_can_be_open_at_once(tmp_path):
+    _app()
+    w = MainWindow()
+    w.path = _wav(tmp_path, 3)
+    reg = [dict(label="e", t0=0.0, t1=2.0, f0=100.0, f1=500.0)]
+    w.open_spectrogram(reg)
+    w.open_spectrogram(reg)
+    assert len(w._detail_windows) == 2 and all(d.isVisible() for d in w._detail_windows)
+    for d in w._detail_windows:
+        d.close()

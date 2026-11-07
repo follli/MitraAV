@@ -48,7 +48,7 @@ COLUMN_TIPS = [
     "How clearly the signal is present: clear, likely or faint. This is not how useful it is.",
     "How much a lead would cut down where or what to look at. 'file history only' means it "
     "describes how the file was made, not where it came from.",
-    "Focus: open the spectrogram on this finding's signal.",
+    "Details: open the spectrogram on this finding's signal.",
 ]
 EXPLAIN = ("<b>Confidence</b> is how clearly the signal is present. <b>Could narrow</b> is how much "
            "it would cut down where or what to look at. A clear signal can still narrow little.")
@@ -129,7 +129,7 @@ class PillDelegate(QStyledItemDelegate):
 
 
 class FocusDelegate(QStyledItemDelegate):
-    """A small 'Focus' pill on rows that point at a signal in the recording."""
+    """A small 'Details' pill on rows that point at a signal in the recording."""
 
     def paint(self, p, opt, idx) -> None:
         _base(self, p, opt, idx)
@@ -145,12 +145,12 @@ class FocusDelegate(QStyledItemDelegate):
         font.setBold(True)
         p.setFont(font)
         p.setPen(QColor(C["bg"]))                       # dark text on the grey fill
-        p.drawText(r, Qt.AlignCenter, "Focus")
+        p.drawText(r, Qt.AlignCenter, "Details")
         p.restore()
 
 
 class ProbeTree(QTreeWidget):
-    """The results tree; the pointer becomes a hand over a Focus pill."""
+    """The results tree; the pointer becomes a hand over a Details pill."""
 
     def mouseMoveEvent(self, e) -> None:
         idx = self.indexAt(e.position().toPoint())
@@ -460,7 +460,10 @@ class MainWindow(QMainWindow):
         except AudioError as e:
             self.statusBar().showMessage(str(e))
             return
-        dlg.exec()
+        dlg.setAttribute(Qt.WA_DeleteOnClose)
+        dlg.setWindowFlag(Qt.Window, True)                 # its own window: several can stay open
+        self._detail_windows = [w for w in getattr(self, "_detail_windows", []) if w.isVisible()] + [dlg]
+        dlg.show()
 
     def _link_clicked(self, url) -> None:
         if url.scheme() == "mitraav-play":
@@ -549,6 +552,8 @@ class MainWindow(QMainWindow):
                         it.setData(2, ROLE, f.strength)
                         it.setText(3, f.narrows_label)
                     it.setForeground(3, QColor(C["muted"]))
+                    for c in range(len(COLUMNS)):          # finished rows sit slightly lighter than queued ones
+                        it.setBackground(c, QColor(C["done"]))
                 g.addChild(it)
                 if name == keep:
                     sel_item = it

@@ -3,7 +3,7 @@ from __future__ import annotations
 from string import Template
 
 COLORS = dict(
-    bg="#111214", panel="#1a1b1e", panel2="#242529", line="#35373c",
+    bg="#111214", panel="#1a1b1e", panel2="#242529", done="#202125", line="#35373c",
     text="#e8e8ea", muted="#8e9096", accent="#d6d6d9", accent_hi="#ffffff",
     green="#34d399", cyan="#22d3ee", amber="#fbbf24", red="#f87171",
     blue="#60a5fa",                       # information (also the progress bar)
@@ -30,7 +30,7 @@ QPushButton[flat="true"], QPushButton#secondary { background: $panel2; color: $t
               border: 1px solid $line; }
 QPushButton#secondary:hover { border-color: $accent_hi; }
 QPushButton:disabled { background: $panel; color: $muted; border: 1px solid $line; }
-QTreeWidget, QListWidget { background: $panel; border: 1px solid $line; border-radius: 14px; outline: none;
+QTreeWidget, QListWidget { background: $panel; border: 1px solid $line; border-radius: 0; outline: none;
                alternate-background-color: $panel; selection-background-color: $panel2; selection-color: $text; }
 QTreeWidget::item { padding: 6px 8px; border-bottom: 1px solid $line; }
 QTreeWidget::item:selected, QListWidget::item:selected { background: $panel2; }
