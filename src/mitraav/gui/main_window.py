@@ -59,12 +59,15 @@ class ScanWorker(QThread):
     started_probe = Signal(str)
     found = Signal(object)
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, only: set[str] | None = None, context: dict | None = None):
         super().__init__()
         self.path = path
+        self.only = only
+        self.context = context
 
     def run(self) -> None:
-        scan(self.path, on_result=self.found.emit, on_start=self.started_probe.emit)
+        scan(self.path, on_result=self.found.emit, on_start=self.started_probe.emit,
+             only=self.only, context=self.context)
 
 
 def _badge(f: Finding) -> tuple[str, str]:
@@ -290,6 +293,7 @@ class MainWindow(QMainWindow):
         self.collapsed: set[str] = {"Visual context"}     # quiet context starts folded away
         self.worker: ScanWorker | None = None
         self.scanning = False
+        self.active: set[str] | None = None            # probes of a partial run (None = all)
         self.path: Path | None = None
         self._tick = 0
 
@@ -457,6 +461,7 @@ class MainWindow(QMainWindow):
         self.by_name.clear()
         self.running = None
         self.scanning = False
+        self.active = None
         plan = planned(path)
         self.plan = [(cls.name, cls.group) for cls, _ in plan]
         self.quiet_groups = {g for g in {c.group for c, _ in plan}
@@ -478,24 +483,36 @@ class MainWindow(QMainWindow):
             f"{path.name} loaded: press Start scan" if self.plan else "No probes apply to this file type yet")
         return True
 
-    def run_scan(self) -> None:
+    def run_scan(self, only: set[str] | None = None) -> None:
+        """Run every probe, or just those named in `only` (a group's Run button)."""
         path = self.path
         if not path or not self.plan or (self.worker and self.worker.isRunning()):
             return
-        self.findings.clear()
-        self.by_name.clear()
+        if only is not None and not isinstance(only, (set, frozenset)):
+            only = None                                  # the button's clicked(bool) lands here
+        context = None
+        prev = self.by_name.get("sound_events")
+        if only is not None and prev is not None and prev.meta.get("busy") is not None:
+            context = dict(busy=prev.meta["busy"], shares=prev.meta.get("shares") or {})
+        if only is None:
+            self.findings.clear()
+            self.by_name.clear()
+        else:
+            self.findings = [f for f in self.findings if f.probe not in only]
+            self.by_name = {f.probe: f for f in self.findings}
+        self.active = set(only) if only is not None else None
         self.running = None
         self.scanning = True
         self.start_btn.setEnabled(False)
         self.start_btn.setText("Scanning...")
-        self.progress.setRange(0, len(self.plan))
+        self.progress.setRange(0, len(only) if only is not None else len(self.plan))
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.statusBar().showMessage("Scanning...")
         self.detail.setHtml(self._placeholder())
         self.refresh()
         self.timer.start()
-        self.worker = ScanWorker(path)
+        self.worker = ScanWorker(path, only, context)
         self.worker.started_probe.connect(self.on_started)
         self.worker.found.connect(self.add_finding)
         self.worker.finished.connect(self.scan_done)
@@ -503,17 +520,17 @@ class MainWindow(QMainWindow):
 
     def on_started(self, name: str) -> None:
         self.running = name
-        done = len(self.findings)
-        self.statusBar().showMessage(f"Running {name} ({done + 1} of {len(self.plan)})...")
+        self.statusBar().showMessage(f"Running {DISPLAY.get(name, name.replace('_', ' '))} "
+                                     f"({self.progress.value() + 1} of {self.progress.maximum()})...")
         self.refresh()
 
     def add_finding(self, f: Finding) -> None:
-        self.findings.append(f)
+        self.findings = [o for o in self.findings if o.probe != f.probe] + [f]
         self.by_name[f.probe] = f
         if self.running == f.probe:
             self.running = None
         if self.plan:
-            self.progress.setValue(min(len(self.findings), len(self.plan)))
+            self.progress.setValue(min(self.progress.value() + 1, self.progress.maximum()))
         self.refresh()
 
     def scan_done(self) -> None:
@@ -542,6 +559,10 @@ class MainWindow(QMainWindow):
 
     def _item_clicked(self, item, column: int) -> None:
         action = item.data(FOCUS_COL, ROLE) if column == FOCUS_COL else None
+        if action == "Run" and item.parent() is None:
+            group = item.data(0, NAME_ROLE + 1)
+            self.run_scan({n for n, g in self.plan if g == group})
+            return
         f = self.by_name.get(item.data(0, NAME_ROLE)) if action else None
         if f is None:
             return
@@ -638,7 +659,7 @@ class MainWindow(QMainWindow):
             ctx = bool(items) and all(f is not None and f.quiet for _, f in items)
             g = QTreeWidgetItem([group, "context only" if ctx else
                                  (f"{leads} of {len(items)} lead{'s' if len(items) != 1 else ''}"
-                                  if all(f for _, f in items) else f"{len(items)} probes"), "", ""])
+                                  if all(f for _, f in items) else f"{len(items)} probe{'s' if len(items) != 1 else ''}"), "", ""])
             font = QFont(self.font())
             font.setBold(True)
             g.setFont(0, font)
@@ -646,13 +667,18 @@ class MainWindow(QMainWindow):
             for c in range(len(COLUMNS)):
                 g.setBackground(c, QColor(C["panel2"]))
             g.setForeground(1, QColor(C["muted"]))
+            if self.path and not self.scanning and self.plan:
+                g.setData(FOCUS_COL, ROLE, "Run")
+                g.setToolTip(FOCUS_COL, f"Run only the {group} probes")
+            g.setData(0, NAME_ROLE + 1, group)
             self.tree.addTopLevelItem(g)
             for name, f in items:
                 it = QTreeWidgetItem([DISPLAY.get(name, name.replace("_", " ")), "", "", ""])
                 it.setData(0, NAME_ROLE, name)
                 if f is None:
                     running = name == self.running
-                    it.setText(1, f"running{dots}" if running else ("queued" if self.scanning else "ready"))
+                    queued = self.scanning and (self.active is None or name in self.active)
+                    it.setText(1, f"running{dots}" if running else ("queued" if queued else "ready"))
                     it.setData(1, ROLE, C["text"] if running else C["muted"])
                     it.setForeground(0, QColor(C["text"] if running else C["muted"]))
                 else:

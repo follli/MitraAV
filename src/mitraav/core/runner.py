@@ -152,11 +152,22 @@ def planned(path: Path) -> list[tuple[type[Probe], str]]:
 
 
 def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
-         on_start: Callable[[str], None] | None = None) -> list[Finding]:
+         on_start: Callable[[str], None] | None = None, only: set[str] | None = None,
+         context: dict | None = None) -> list[Finding]:
+    """Run the planned probes, or just those named in `only`. `context` carries what an earlier
+    sound overview found ({"busy": share, "shares": {...}}) so a partial run can still judge masking;
+    when a partial run needs it and has none, the sound overview is run first."""
     findings = []
-    busy: float | None = None
-    shares: dict[str, float] = {}
-    for cls, mode in planned(path):
+    busy: float | None = (context or {}).get("busy")
+    shares: dict[str, float] = dict((context or {}).get("shares") or {})
+    todo = planned(path)
+    if only is not None:
+        chosen = [(c, m) for c, m in todo if c.name in only]
+        needs = any(c.clutter_sensitive or c.masked_by for c, _ in chosen)
+        if needs and busy is None and not any(c.name == "sound_events" for c, _ in chosen):
+            chosen = [(c, m) for c, m in todo if c.name == "sound_events"] + chosen
+        todo = chosen
+    for cls, mode in todo:
         if on_start:
             on_start(cls.name)
         f = run_probe(cls, path) if mode == "direct" else run_on_frames(cls, path)
@@ -168,10 +179,14 @@ def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
             if note:
                 f = replace(f, caveat=note)
         if busy is not None and busy >= BUSY_THRESHOLD and cls.clutter_sensitive and f.status == "ok":
-            f = replace(f, caveat=f"Speech or music fills about {busy * 100:.0f}% of this recording, "
-                                  "which masks faint sounds and can imitate tones, so this result is "
-                                  "inconclusive: absence proves nothing and a lead needs a clean "
-                                  "recording to confirm.")
+            if f.detected:       # a lead found despite speech is kept (faint signals matter), with a note
+                f = replace(f, summary=f.summary + f" (Speech or music fills about {busy * 100:.0f}% of "
+                                                   "this recording, so confirm it on a cleaner stretch.)")
+            else:
+                f = replace(f, caveat=f"Speech or music fills about {busy * 100:.0f}% of this recording, "
+                                      "which masks faint sounds and can imitate tones, so this result is "
+                                      "inconclusive: absence proves nothing and a lead needs a clean "
+                                      "recording to confirm.")
         findings.append(f)
         if on_result:
             on_result(f)

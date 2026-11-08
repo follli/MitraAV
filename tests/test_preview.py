@@ -275,3 +275,40 @@ def test_opening_a_file_does_not_scan_until_start_is_pressed(tmp_path):
     kids = [w.tree.topLevelItem(i).child(j).text(1) for i in range(w.tree.topLevelItemCount())
             for j in range(w.tree.topLevelItem(i).childCount())]
     assert kids and set(kids) == {"ready"}
+
+
+def test_group_run_button_runs_only_that_group(tmp_path, monkeypatch):
+    from mitraav.gui import main_window as mw
+    _app()
+    w = MainWindow()
+    assert w.load_file(_wav(tmp_path, 3))
+    groups = {w.tree.topLevelItem(i).data(0, mw.NAME_ROLE + 1): w.tree.topLevelItem(i) for i in range(w.tree.topLevelItemCount())}
+    sounds = groups["Sounds"]
+    assert sounds.data(mw.FOCUS_COL, mw.ROLE) == "Run"
+    started = []
+    monkeypatch.setattr(w, "run_scan", lambda only=None: started.append(only))
+    w._item_clicked(sounds, mw.FOCUS_COL)
+    assert started and "tones_chimes" in started[0] and "mains_hum" not in started[0]
+
+
+def test_partial_scan_replaces_only_its_probes_and_keeps_the_rest(monkeypatch, tmp_path):
+    from mitraav.core import runner
+    seen = []
+    monkeypatch.setattr(runner, "planned", lambda path: [(type("P", (), dict(name=n, group="g", order=1, clutter_sensitive=False,
+                                                                           masked_by=(), quiet=False)), "direct") for n in ("a", "b")])
+    monkeypatch.setattr(runner, "run_probe", lambda cls, path: seen.append(cls.name) or Finding(probe=cls.name, detected=False))
+    runner.scan(tmp_path / "x", only={"b"})
+    assert seen == ["b"]
+
+
+def test_a_lead_found_under_speech_is_kept_but_a_miss_is_inconclusive(monkeypatch, tmp_path):
+    from mitraav.core import runner
+    P = type("P", (), dict(name="doppler_pass", group="g", order=1, clutter_sensitive=True, masked_by=(), quiet=False))
+    monkeypatch.setattr(runner, "planned", lambda path: [(P, "direct")])
+    for det, expect_caveat in ((True, False), (False, True)):
+        monkeypatch.setattr(runner, "run_probe", lambda cls, path, d=det: Finding(probe=cls.name, detected=d, strength=.6,
+                                                                                     narrows=.4, summary="x"))
+        f = runner.scan(tmp_path / "x", context={"busy": 0.6, "shares": {}})[0]
+        assert bool(f.caveat) == expect_caveat
+        if not expect_caveat:
+            assert "Speech or music" in f.summary and f.detected
