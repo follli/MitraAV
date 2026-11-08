@@ -46,6 +46,10 @@ offset between events, and the bird probe names species and a general region.
 
 ![Audio: results grouped by what they tell you](docs/screenshot-results.png)
 
+You don't have to scan everything: the **Run** button on each group header (right edge of the table
+above) scans just that group, and for a picture or video frame you can drag a rectangle round one
+region and scan only that.
+
 **The identified signal**: the Doppler glide of one fly-by from that recording, with labelled axes and a live time and frequency readout.
 
 ![The identified signal, with labelled axes and a live time/frequency readout](docs/screenshot-signal.png)
@@ -87,7 +91,7 @@ mitraav-scan file [--json]      # the same probes from the command line
 ```
 
 Results are grouped. Each probe shows a **lead** pill (it found something; "lead · very low" when faint) or an **info** pill (it ran and found nothing notable); the detail pane gives its confidence.
-For a video or picture, **Scan this frame** (under the player) runs the picture probes on the frame you are looking at; drag a rectangle around a sign or detail to scan just that, enlarged. Each group has a **Run** button to run just those probes (the sound overview is rerun first if they need to know how busy the audio is). A lead found under speech or music is kept with a note; a miss there is marked inconclusive. Inactive probes (nothing found, not run) sit greyed at the bottom of their group. "Context" rows
+For a video or picture, **Scan this frame** (under the player) runs the picture probes on the frame you are looking at; drag a rectangle around a sign or detail to scan just that, enlarged. You can also pick sections to scan one at a time: each group has a **Run** button to run just those probes (the sound overview is rerun first if they need to know how busy the audio is). A lead found under speech or music is kept with a note; a miss there is marked inconclusive. Inactive probes (nothing found, not run) sit greyed at the bottom of their group. "Context" rows
 (scene type, reverse-search helper) only report what you could see yourself and are folded away.
 Rows that point at a signal in a recording have a small action button: **Spectro** opens the spectrogram on that
 finding's signal, **Image** shows the picture full size, with any text lines outlined (the text itself is withheld for numbers) and **Map** opens GPS coordinates in OpenStreetMap. History (next to Open file) lists earlier scans.
