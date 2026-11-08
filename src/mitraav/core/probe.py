@@ -16,6 +16,7 @@ class Probe(ABC):
     media: tuple[MediaType, ...] = (MediaType.ANY,)
     timeout: float = 10.0  # seconds; the runner enforces this
     frames_ok: bool = True  # image probes may be run on sampled video frames
+    frames_min_agree: int = 1   # video: frames that must agree (same meta["label"]) before a lead stands
     context: dict = {}      # what earlier probes found (set by the runner; see core/context.py)
 
     @abstractmethod

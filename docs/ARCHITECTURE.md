@@ -74,8 +74,9 @@ hints for later use.
 
 ## Scoring shown to users
 
-`Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The GUI shows
-one plain-language column, **Confidence** (clear / likely / faint). Groups keep scan order while probes
+`Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The table shows
+only the result pills (lead, lead · very low, info, inconclusive, context); the detail pane gives the
+confidence word (clear / likely / faint). Groups keep scan order while probes
 report in and sort by best lead once the scan is done; inactive probes sink to the bottom of a group. A faint lead is flagged
 "very low"; results from busy audio are "inconclusive"; probes that ran and found
 nothing notable show "info" (blue), which, like every other row, can be clicked for details.

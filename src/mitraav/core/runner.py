@@ -11,6 +11,7 @@ from pathlib import Path
 
 from .context import merge as merge_context
 from .finding import Finding, MediaType
+from .finding import plain as plain_text
 from .frames import extract_frames, ffprobe
 from .probe import Probe
 
@@ -119,6 +120,15 @@ def run_on_frames(cls: type[Probe], path: Path, context: dict | None = None) -> 
     results = [(t, run_probe(cls, fp, context)) for t, fp in frames]
     ok = [r for r in results if r[1].status == "ok"]
     t, best = max(ok or results, key=lambda r: r[1].score)
+    need = getattr(cls, "frames_min_agree", 1)
+    if best.detected and need > 1:
+        label = best.meta.get("label")
+        agree = sum(1 for _, f in ok if f.detected and f.meta.get("label") == label)
+        if len(ok) >= need and agree < need:
+            return replace(best, detected=False, info=True, strength=0.0, narrows=0.0, follow_ups=[], boxes=[],
+                           summary=f"Seen in only {agree} of {len(ok)} sampled frames ({plain_text(best.summary)}). "
+                                   "A real plant or animal usually stays in view, so this is unconfirmed: use "
+                                   "Scan this frame on the moment it is visible to check it.")
     if best.detected:
         hits = sum(1 for _, f in ok if f.detected)
         best = replace(best, summary=f"[frame at {t:.0f}s; {hits}/{len(ok)} sampled frames "

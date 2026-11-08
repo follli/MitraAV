@@ -38,8 +38,8 @@ from .preview import MediaPreview, _FullImage
 from .spectro_view import SpectrogramDialog, fmt_time
 
 C = theme.COLORS
-COLUMNS = ["Probe", "Result", "Confidence", ""]
-FOCUS_COL = 3
+COLUMNS = ["Probe", "Result", ""]
+FOCUS_COL = 2
 DISPLAY = {"tones_chimes": "tones and chimes", "sound_events": "sound overview"}      # names shown in place of the probe id
 ROLE = Qt.UserRole
 NAME_ROLE = Qt.UserRole + 1
@@ -49,12 +49,11 @@ COLUMN_TIPS = [
     "The probe that ran.",
     "lead = the probe found something. info = it ran and found nothing notable (click for details; "
     "this is not proof of absence).",
-    "How clearly the signal is present: clear, likely or faint. This is not how useful it is.",
     "Row action: Spectro opens the spectrogram on the signal, Image shows the picture full size, "
     "Map opens the coordinates in OpenStreetMap.",
 ]
-EXPLAIN = ("<b>Confidence</b> is how clearly the signal is present. A clear signal can still say little "
-           "about where a recording was made.")
+EXPLAIN = ("A <b>lead</b> means the probe found something worth a look; <b>info</b> means it ran and found "
+           "nothing notable. Neither is proof: a clear signal can still say little about where it was recorded.")
 
 
 class ScanWorker(QThread):
@@ -227,33 +226,6 @@ class ProbeTree(QTreeWidget):
         super().mouseMoveEvent(e)
 
 
-class ConfidenceDelegate(QStyledItemDelegate):
-    """A short bar for how clearly the signal is present, with its word beside it."""
-
-    def paint(self, p, opt, idx) -> None:
-        _base(self, p, opt, idx)
-        strength = idx.data(ROLE)
-        if strength is None:
-            return
-        col = C["green"] if strength >= 0.7 else C["cyan"] if strength >= 0.4 else C["amber"]
-        p.save()
-        p.setRenderHint(QPainter.Antialiasing)
-        r = QRectF(opt.rect).adjusted(8, 0, -58, 0)
-        r.setTop(r.center().y() - 4)
-        r.setHeight(8)
-        p.setPen(Qt.NoPen)
-        p.setBrush(QColor(C["panel2"]))
-        p.drawRoundedRect(r, 4, 4)
-        fill = QRectF(r)
-        fill.setWidth(max(6.0, r.width() * min(1.0, strength)))
-        p.setBrush(QColor(col))
-        p.drawRoundedRect(fill, 4, 4)
-        p.setPen(QColor(C["text"]))
-        p.drawText(QRectF(opt.rect).adjusted(0, 0, -8, 0), Qt.AlignRight | Qt.AlignVCenter,
-                   idx.data() or "")
-        p.restore()
-
-
 class ElidedLabel(QLabel):
     """A label that shortens its text in the middle to fit, keeping the full text available."""
 
@@ -358,17 +330,14 @@ class MainWindow(QMainWindow):
         hh = self.tree.header()
         hh.setStretchLastSection(False)
         hh.setSectionResizeMode(0, QHeaderView.Fixed)
-        hh.setSectionResizeMode(1, QHeaderView.Fixed)
-        hh.setSectionResizeMode(2, QHeaderView.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.Stretch)
         hh.setSectionResizeMode(FOCUS_COL, QHeaderView.Fixed)
-        self.tree.setColumnWidth(0, 180)
-        self.tree.setColumnWidth(1, 140)
+        self.tree.setColumnWidth(0, 200)
         self.tree.setColumnWidth(FOCUS_COL, 74)
         self.tree.setItemDelegateForColumn(FOCUS_COL, FocusDelegate(self.tree))
         self.tree.itemClicked.connect(self._item_clicked)
         self.tree.itemDoubleClicked.connect(self._item_double_clicked)
         self.tree.setItemDelegateForColumn(1, PillDelegate(self.tree))
-        self.tree.setItemDelegateForColumn(2, ConfidenceDelegate(self.tree))
         self.tree.itemSelectionChanged.connect(self.show_detail)
         self.tree.itemCollapsed.connect(lambda it: self.collapsed.add(it.text(0)))
         self.tree.itemExpanded.connect(lambda it: self.collapsed.discard(it.text(0)))
@@ -666,7 +635,7 @@ class MainWindow(QMainWindow):
             ctx = bool(items) and all(f is not None and f.quiet for _, f in items)
             g = QTreeWidgetItem([group, "context only" if ctx else
                                  (f"{leads} of {len(items)} lead{'s' if len(items) != 1 else ''}"
-                                  if all(f for _, f in items) else f"{len(items)} probe{'s' if len(items) != 1 else ''}"), "", ""])
+                                  if all(f for _, f in items) else f"{len(items)} probe{'s' if len(items) != 1 else ''}"), ""])
             font = QFont(self.font())
             font.setBold(True)
             g.setFont(0, font)
@@ -680,7 +649,7 @@ class MainWindow(QMainWindow):
             g.setData(0, NAME_ROLE + 1, group)
             self.tree.addTopLevelItem(g)
             for name, f in items:
-                it = QTreeWidgetItem([DISPLAY.get(name, name.replace("_", " ")), "", "", ""])
+                it = QTreeWidgetItem([DISPLAY.get(name, name.replace("_", " ")), "", ""])
                 it.setData(0, NAME_ROLE, name)
                 if f is None:
                     running = name == self.running
@@ -701,14 +670,6 @@ class MainWindow(QMainWindow):
                         it.setToolTip(FOCUS_COL, {"Spectro": "Open the spectrogram on this finding's signal",
                                                   "Image": "Show the picture full size (text regions outlined when found)",
                                                   "Map": "Open these coordinates in OpenStreetMap"}[action])
-                    if f.inconclusive:
-                        it.setText(2, "busy audio")
-                    elif f.detected and f.status == "ok" and f.quiet:
-                        it.setText(2, "visible to the eye")
-                    elif f.detected and f.status == "ok":
-                        it.setText(2, f.confidence_label)
-                        it.setData(2, ROLE, f.strength)
-                    it.setForeground(2, QColor(C["muted"]))
                     if not _is_active(f):                  # nothing to act on: name greyed, sits at the bottom
                         it.setForeground(0, QColor(C["muted"]))
                     for c in range(len(COLUMNS)):          # finished rows sit slightly lighter than queued ones

@@ -81,10 +81,15 @@ class NatureIdProbe(Probe):
     name = "nature_id"
     group = "Living things"
     media = (MediaType.IMAGE,)
+    frames_min_agree = 2     # video: the same species in two sampled frames, or it is only unconfirmed
     frames_ok = True         # video: the sampled frames are classified one by one (slow: a model load each)
     timeout = 300.0
 
     def run(self, path: Path) -> Finding:
+        # A scan must never touch the network. These are read when huggingface_hub is first imported,
+        # which files_present() below does, so they must be set before anything else runs.
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
         if not installed():
             return Finding(probe=self.name, detected=False, status="not_run",
                            detail=f"Species identification is an optional add-on (about 1.7 GB): {INSTALL}")
@@ -99,7 +104,6 @@ class NatureIdProbe(Probe):
         else:
             whole = _scene_of(path)
         whole_built = _is_built(whole, BUILT_P)
-        os.environ["HF_HUB_OFFLINE"] = "1"                  # a scan must never touch the network
         from bioclip import Rank, TreeOfLifeClassifier
         clf = TreeOfLifeClassifier(model_str=MODEL_STR, device="cpu")
         found: list[dict] = []
@@ -129,6 +133,7 @@ class NatureIdProbe(Probe):
         if whole_built and best["box"] is not None:
             where += (f" (the picture as a whole looks like {whole[1]}, so the rest was not trusted)")
         fin = best["finding"]
+        fin.meta = {**fin.meta, "label": best["label"]}
         if where:
             key = " is consistent with" if " is consistent with" in fin.summary else " looks like"
             fin.summary = fin.summary.replace(key, where + key, 1)

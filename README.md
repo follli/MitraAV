@@ -60,7 +60,7 @@ mitraav [file]                  # the app (drop a file on it, press Start scan; 
 mitraav-scan file [--json]      # the same probes from the command line
 ```
 
-Results are grouped. **Confidence** says how clearly a signal is present (clear, likely, faint);
+Results are grouped. Each probe shows a **lead** pill (it found something; "lead · very low" when faint) or an **info** pill (it ran and found nothing notable); the detail pane gives its confidence.
 For a video or picture, **Scan this frame** (under the player) runs the picture probes on the frame you are looking at; drag a rectangle around a sign or detail to scan just that, enlarged. Each group has a **Run** button to run just those probes (the sound overview is rerun first if they need to know how busy the audio is). A lead found under speech or music is kept with a note; a miss there is marked inconclusive. Inactive probes (nothing found, not run) sit greyed at the bottom of their group. "Context" rows
 (scene type, reverse-search helper) only report what you could see yourself and are folded away.
 Rows that point at a signal in a recording have a small action button: **Spectro** opens the spectrogram on that

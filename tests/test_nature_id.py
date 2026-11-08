@@ -147,3 +147,28 @@ def test_scene_from_shared_context_is_used_for_the_same_picture(tmp_path, monkey
     probe.context = {"scene": dict(path=str(big), kind="worship", label="church", p=0.8, kinds=["worship"])}
     f = probe.run(big)
     assert "c.png" not in calls and f.detected                 # whole-picture scene came from the context
+
+
+def test_a_scan_forces_huggingface_offline_before_anything_is_imported(img, monkeypatch):
+    import os
+    monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+    monkeypatch.setattr(ni, "installed", lambda: False)
+    ni.NatureIdProbe().run(img)
+    assert os.environ["HF_HUB_OFFLINE"] == "1" and os.environ["TRANSFORMERS_OFFLINE"] == "1"
+
+
+def test_a_species_seen_in_a_single_video_frame_is_only_unconfirmed(tmp_path, monkeypatch):
+    from mitraav.core import runner
+    from mitraav.core.finding import Finding
+    frames = [(float(i), tmp_path / f"f{i}.jpg") for i in range(5)]
+    monkeypatch.setattr(runner, "extract_frames", lambda p: frames)
+    hit = Finding(probe="nature_id", detected=True, strength=0.7, narrows=0.3, summary="a **cat**", meta={"label": "Felis catus"})
+    miss = Finding(probe="nature_id", detected=False, summary="none")
+    results = {frames[1][1]: hit}
+    monkeypatch.setattr(runner, "run_probe", lambda cls, p, ctx=None: results.get(p, miss))
+    f = runner.run_on_frames(ni.NatureIdProbe, tmp_path / "v.mp4")
+    assert not f.detected and f.info and "only 1 of 5" in f.summary and "cat" in f.summary
+    for i in (1, 3):
+        results[frames[i][1]] = hit
+    f = runner.run_on_frames(ni.NatureIdProbe, tmp_path / "v.mp4")
+    assert f.detected and "2/5 sampled frames" in f.summary

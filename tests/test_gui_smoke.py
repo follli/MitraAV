@@ -85,6 +85,6 @@ def test_quiet_context_is_collapsed_unflagged_and_not_a_lead():
     assert _group_names(w) == ["Setting and power", "Visual context", "File and metadata"]
     ctx = w.tree.topLevelItem(1)
     assert ctx.text(1) == "context only" and not ctx.isExpanded()
-    assert ctx.child(0).text(1) == "context" and ctx.child(0).text(2) == "visible to the eye"
+    assert ctx.child(0).text(1) == "context"
     assert not Finding(probe="x", group="Visual context", quiet=True, detected=True,
                        strength=0.2, narrows=0.05).very_low
