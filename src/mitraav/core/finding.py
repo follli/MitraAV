@@ -13,7 +13,7 @@ class MediaType(str, Enum):
 
 def plain(text: str) -> str:
     """Summaries mark key words with **double asterisks** (the GUI shows them bold)."""
-    return text.replace("**", "")
+    return text.replace("**", "").replace("~~", "")
 
 
 @dataclass

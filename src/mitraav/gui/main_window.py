@@ -89,7 +89,9 @@ def _badge(f: Finding) -> tuple[str, str]:
 def _rich(text: str) -> str:
     """Escape, then turn **key words** into bold."""
     parts = html.escape(text).split("**")
-    return "".join(f"<b>{p}</b>" if i % 2 else p for i, p in enumerate(parts))
+    out = "".join(f"<b>{p}</b>" if i % 2 else p for i, p in enumerate(parts))
+    muted = out.split("~~")                           # ~~text~~ = weaker items, shown muted but kept
+    return "".join(f'<span class="muted">{p}</span>' if i % 2 else p for i, p in enumerate(muted))
 
 
 def _is_active(f: Finding) -> bool:
@@ -717,11 +719,14 @@ class MainWindow(QMainWindow):
         if f.constrains:
             parts.append(f"<p><b>Helps with:</b> {html.escape(', '.join(f.constrains))}</p>")
         if f.follow_ups:
-            parts.append("<p><b>Follow up with:</b></p><ul>")
+            parts.append("<p><b>Where to look next:</b></p><ul>")
             for u in f.follow_ups:
                 name = html.escape(u.name)
                 link = f'<a href="{html.escape(u.url, quote=True)}">{name}</a>' if u.url else name
                 note = f" - {html.escape(u.note)}" if u.note else ""
                 parts.append(f"<li>{link}{note}</li>")
             parts.append("</ul>")
+        if f.detected and f.status == "ok" and not f.quiet:
+            parts.append("<p class='muted'>A lead, not a conclusion: classifiers and heuristics mislabel "
+                         "confusable, distant or stylised material. Fainter guesses are shown muted, not hidden.</p>")
         self.detail.setHtml("".join(parts))

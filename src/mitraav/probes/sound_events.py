@@ -150,14 +150,17 @@ class SoundEventsProbe(Probe):
         for e in events:
             by_cat[e["cat"]].append(e)
         notes, fups, cons, specific = [], [], ["source type"], 0
-        for key, name, _, locates in CATEGORIES:
-            es = by_cat.get(key)
-            if not es:
-                continue
-            top = es[:3]
-            notes.append(f"{name}: " + ", ".join(
-                f"**{e['label'].split(',')[0].lower()}** ({e['n']} windows, best {e['best']:.2f}, "
-                f"{e['t0']:.0f}-{e['t1']:.0f} s)" for e in top))
+        cats = [c for c in CATEGORIES if by_cat.get(c[0])]
+        cats.sort(key=lambda c: -max(e["n"] * e["best"] for e in by_cat[c[0]]))   # best-supported group first
+        for key, name, _, locates in cats:
+            parts = []
+            for e in by_cat[key]:                       # nothing is dropped: weaker guesses are only muted
+                label = e["label"].split(",")[0].lower()
+                if e["best"] >= 0.5 or e["n"] >= 6:
+                    parts.append(f"**{label}** ({e['n']} windows, {e['t0']:.0f}-{e['t1']:.0f} s, best {e['best']:.2f})")
+                else:
+                    parts.append(f"~~{label} ({e['n']} windows, best {e['best']:.2f})~~")
+            notes.append(f"{name}: " + ", ".join(parts))
             fups += follow_ups("events", key)
             if locates and key != "setting":
                 specific += 1
@@ -166,11 +169,9 @@ class SoundEventsProbe(Probe):
         regions = [dict(label=f"{e['label'].split(',')[0]} ({e['best']:.2f})", t0=max(0.0, e["t0"] - 1),
                         t1=e["t1"] + 1, f0=0.0, f1=8000.0) for e in events[:8]]
         strength = min(1.0, 0.3 + 0.1 * len(by_cat) + 0.1 * specific)
-        busy_note = (f" Speech or music fills about **{busy * 100:.0f}%** of the recording, so the "
-                     "other sound probes are marked inconclusive." if busy >= 0.35 else "")
         return Finding(
             probe=self.name, detected=True, strength=strength, narrows=0.2, constrains=cons,
             effort=1, regions=regions, follow_ups=fups, meta={"busy": busy, "shares": shares, "context": {"sound": {"busy": busy, "shares": shares}}},
-            summary="Sounds consistent with: " + "; ".join(notes) + "." + busy_note + " Labels come from a small "
-            "general classifier: confusable and distant sounds are often mislabelled, so treat "
-            "them as leads and use the specific probes and recordings to confirm.")
+            summary=" • ".join(notes + (
+                [f"Speech or music fills about **{busy * 100:.0f}%** of the recording, so the other sound "
+                 "probes are marked inconclusive."] if busy >= 0.35 else [])))

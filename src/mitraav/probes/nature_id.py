@@ -192,5 +192,4 @@ class NatureIdProbe(Probe):
             summary=f"The {_kingdom_word(best.get('kingdom', ''))} is consistent with **{sci}**"
                     + (f" (**{common}**)" if common else "") + f" at {score * 100:.0f}%"
                     + (f"; other candidates: {alts}" if alts else "")
-                    + ". Look-alike species are common and cultivated plants grow far outside their "
-                      "native range, so use it as a lead to a range and season, not as a location.")
+                    + ". A lead to a range and season, not a location (look-alikes and garden plants are common).")

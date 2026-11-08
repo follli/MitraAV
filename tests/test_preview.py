@@ -360,3 +360,12 @@ def test_preview_offers_scan_frame_for_video_and_region_for_images(tmp_path):
     assert not w.frame_btn.isHidden() and "region" in w.frame_btn.text()
     w.frame_btn.click()
     assert got == [0.0]
+
+
+def test_weaker_guesses_are_muted_not_hidden():
+    from mitraav.core.finding import plain
+    from mitraav.gui.main_window import _rich
+    text = "Road vehicles: **vehicle** (38 windows, best 0.89), ~~bus (4 windows, best 0.40)~~"
+    assert "bus (4 windows, best 0.40)" in plain(text) and "~~" not in plain(text)
+    html_ = _rich(text)
+    assert "<b>vehicle</b>" in html_ and 'class="muted">bus (4 windows' in html_

@@ -261,5 +261,4 @@ class ImageTextProbe(Probe):
                                                       regions=regions)}},
                        narrows=0.3, constrains=sorted(set(cons)), effort=1, boxes=line_boxes(lines),
                        follow_ups=follow_ups("metadata", "text"),
-                       summary="; ".join(notes) + ". These are hints (businesses, travellers and "
-                       "global services use foreign codes, domains and currencies).")
+                       summary="; ".join(notes) + ". Hints only: global services use foreign codes and currencies.")

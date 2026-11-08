@@ -264,7 +264,7 @@ class FrameDialog(QDialog):
                  f'<span style="color:{color}">{html.escape(label)}</span></h3>']
         parts.append(f"<p>{_rich(f.summary) if f.summary else html.escape(f.detail or 'Nothing found.')}</p>")
         if f.follow_ups:
-            parts.append("<p><b>Follow up with:</b></p><ul>" + "".join(
+            parts.append("<p><b>Where to look next:</b></p><ul>" + "".join(
                 f'<li><a href="{html.escape(u.url, quote=True)}">{html.escape(u.name)}</a></li>' if u.url
                 else f"<li>{html.escape(u.name)}</li>" for u in f.follow_ups) + "</ul>")
         self.out.setHtml("".join(parts))
