@@ -150,6 +150,7 @@ class _FullImage(QDialog):
 
 class MediaPreview(QFrame):
     """Thumbnail or player for the file being analysed."""
+    frame_requested = Signal(float)          # seconds into the video (0 for a picture)
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -202,6 +203,11 @@ class MediaPreview(QFrame):
         lay.setSpacing(8)
         lay.addWidget(self.stack)
         lay.addWidget(self.controls)
+        self.frame_btn = QPushButton("Scan this frame")
+        self.frame_btn.setObjectName("secondary")
+        self.frame_btn.setToolTip("Run the picture probes on the frame you are looking at, or on a region of it")
+        self.frame_btn.clicked.connect(lambda: self.frame_requested.emit(self.position_seconds()))
+        lay.addWidget(self.frame_btn)
         lay.addWidget(self.note)
 
         self.slider.sliderPressed.connect(lambda: setattr(self, "_dragging", True))
@@ -247,6 +253,7 @@ class MediaPreview(QFrame):
             self.player.setSource(QUrl())
         self.path, self.media = None, None
         self.controls.setVisible(False)
+        self.frame_btn.setVisible(False)
         self.note.setText("")
         self.setVisible(False)
 
@@ -285,6 +292,8 @@ class MediaPreview(QFrame):
             self._open_player()
         else:
             return
+        self.frame_btn.setVisible(media in (MediaType.IMAGE, MediaType.VIDEO))
+        self.frame_btn.setText("Scan this frame" if media == MediaType.VIDEO else "Scan a region")
         self.setVisible(True)
 
     def _open_player(self) -> None:
@@ -354,6 +363,9 @@ class MediaPreview(QFrame):
         self.player.setPosition(max(0, int(seconds * 1000)))
         self.player.play()
         return True
+
+    def position_seconds(self) -> float:
+        return self.player.position() / 1000.0 if self.player and self.media == MediaType.VIDEO else 0.0
 
     def can_play(self) -> bool:
         return bool(self.player and self.path and self.media in (MediaType.AUDIO, MediaType.VIDEO))

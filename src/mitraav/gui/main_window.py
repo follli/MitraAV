@@ -31,6 +31,7 @@ from ..core.finding import Finding, MediaType, plain
 from ..core.runner import media_of, planned, scan
 from . import theme
 from .addons_dialog import AddonsDialog
+from .frame_dialog import FrameDialog
 from .history_dialog import HistoryDialog
 from .preview import MediaPreview, _FullImage
 from .spectro_view import SpectrogramDialog, fmt_time
@@ -335,6 +336,7 @@ class MainWindow(QMainWindow):
         header.addWidget(addons_btn)
 
         self.preview = MediaPreview()
+        self.preview.frame_requested.connect(self.open_frame)
 
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
@@ -591,6 +593,13 @@ class MainWindow(QMainWindow):
             return
         dlg.setAttribute(Qt.WA_DeleteOnClose)
         dlg.setWindowFlag(Qt.Window, True)                 # its own window: several can stay open
+        self._keep(dlg)
+        dlg.show()
+
+    def open_frame(self, seconds: float) -> None:
+        if not self.path or self.media not in (MediaType.IMAGE, MediaType.VIDEO):
+            return
+        dlg = FrameDialog(self.path, self.media, seconds, self)
         self._keep(dlg)
         dlg.show()
 

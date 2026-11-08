@@ -52,6 +52,25 @@ def extract_frames(path: Path, n: int = N_FRAMES) -> list[tuple[float, Path]]:
     return out
 
 
+def frame_at(path: Path, seconds: float) -> Path | None:
+    """The full-size video frame at `seconds` as a JPEG, cached in the temp dir (None on failure)."""
+    exe = shutil.which("ffmpeg")
+    if not exe:
+        return None
+    st = path.stat()
+    key = hashlib.sha1(f"{path.resolve()}|{st.st_mtime_ns}|{st.st_size}|{int(seconds * 1000)}".encode()).hexdigest()[:16]
+    d = Path(tempfile.gettempdir()) / "mitraav-cache"
+    d.mkdir(parents=True, exist_ok=True)
+    out = d / f"frame-{key}.jpg"
+    if not (out.exists() and out.stat().st_size > 0):
+        try:
+            subprocess.run([exe, "-v", "error", "-y", "-ss", f"{max(0.0, seconds):.3f}", "-i", str(path),
+                            "-frames:v", "1", "-q:v", "2", str(out)], capture_output=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            return None
+    return out if out.exists() and out.stat().st_size > 0 else None
+
+
 def thumbnail(path: Path, width: int = 480) -> Path | None:
     """One scaled JPEG frame from a video (about 1 s in, or the first frame of a very short clip),
     cached in the temp dir. None if ffmpeg is missing or the file has no decodable video."""

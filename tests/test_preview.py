@@ -312,3 +312,49 @@ def test_a_lead_found_under_speech_is_kept_but_a_miss_is_inconclusive(monkeypatc
         assert bool(f.caveat) == expect_caveat
         if not expect_caveat:
             assert "Speech or music" in f.summary and f.detected
+
+
+def test_region_crops_are_enlarged_and_whole_frames_are_not(tmp_path):
+    from mitraav.gui.frame_dialog import prepare_crop
+    img = tmp_path / "i.png"
+    Image.new("RGB", (1000, 800), "white").save(img)
+    assert prepare_crop(img, None, tmp_path) == img
+    out = prepare_crop(img, (0.5, 0.5, 0.6, 0.55), tmp_path)           # 100 x 40 px selection
+    assert Image.open(out).width >= 500
+
+
+def test_frame_dialog_scans_a_selection_with_the_picture_probes(tmp_path, monkeypatch):
+    from mitraav.gui import frame_dialog as fd
+    _app()
+    img = tmp_path / "i.png"
+    Image.new("RGB", (400, 300), "white").save(img)
+    seen = []
+    monkeypatch.setattr(fd, "image_probes", lambda file_level=True: [type("P", (), dict(name="image_text", order=1))])
+    monkeypatch.setattr(fd, "run_probe", lambda cls, p: seen.append(p.name) or Finding(
+        probe=cls.name, detected=True, strength=.5, narrows=.3, summary="the word **hello**"))
+    dlg = fd.FrameDialog(img, MediaType.IMAGE, 0.0)
+    dlg.resize(800, 700)
+    dlg.show()
+    _wait(100)
+    assert not dlg.region_btn.isEnabled()
+    dlg.picker.fractions = (0.1, 0.1, 0.5, 0.4)
+    dlg._sel_changed()
+    assert dlg.region_btn.isEnabled()
+    dlg.scan(dlg.picker.fractions)
+    dlg.worker.wait(5000)
+    _wait(100)
+    assert seen and seen[0].startswith("region-") and "hello" in dlg.out.toPlainText()
+    dlg.close()
+
+
+def test_preview_offers_scan_frame_for_video_and_region_for_images(tmp_path):
+    _app()
+    img = tmp_path / "i.png"
+    Image.new("RGB", (40, 30)).save(img)
+    w = pv.MediaPreview()
+    got = []
+    w.frame_requested.connect(got.append)
+    w.load(img, MediaType.IMAGE)
+    assert not w.frame_btn.isHidden() and "region" in w.frame_btn.text()
+    w.frame_btn.click()
+    assert got == [0.0]
