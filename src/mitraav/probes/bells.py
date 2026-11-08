@@ -13,8 +13,7 @@ from scipy.ndimage import maximum_filter1d, uniform_filter1d
 from scipy.signal import spectrogram
 
 from ..core.audio import AudioError, iter_chunks
-from ..core.finding import Finding, MediaType
-from ..core.probe import Probe
+from ..core.finding import Finding
 from ..core.references import follow_ups
 
 RATIOS = (0.5, 1.0, 1.2, 1.5, 2.0)      # hum, prime, tierce, quint, nominal
@@ -124,12 +123,10 @@ def cluster(strikes: list[dict]) -> list[dict]:
     return out
 
 
-class ChurchBellsProbe(Probe):
+class ChurchBellsProbe:
+    """Part of the combined tones_chimes probe (see tones.py); not a probe on its own."""
+
     name = "church_bells"
-    group = "Sounds"
-    clutter_sensitive = True
-    media = (MediaType.AUDIO, MediaType.VIDEO)
-    timeout = 600.0
 
     def run(self, path: Path) -> Finding:
         strikes: list[dict] = []

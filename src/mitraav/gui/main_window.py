@@ -38,7 +38,7 @@ from .spectro_view import SpectrogramDialog, fmt_time
 C = theme.COLORS
 COLUMNS = ["Probe", "Result", "Confidence", ""]
 FOCUS_COL = 3
-DISPLAY = {"church_bells": "tones and chimes"}      # names shown in place of the probe id
+DISPLAY = {"tones_chimes": "tones and chimes", "sound_events": "sound overview"}      # names shown in place of the probe id
 ROLE = Qt.UserRole
 NAME_ROLE = Qt.UserRole + 1
 LAST_GROUP = "File and metadata"
@@ -289,6 +289,7 @@ class MainWindow(QMainWindow):
         self.running: str | None = None
         self.collapsed: set[str] = {"Visual context"}     # quiet context starts folded away
         self.worker: ScanWorker | None = None
+        self.scanning = False
         self.path: Path | None = None
         self._tick = 0
 
@@ -322,6 +323,10 @@ class MainWindow(QMainWindow):
         header.setSpacing(10)
         header.addLayout(names)
         header.addWidget(self.drop, 1)
+        self.start_btn = QPushButton("Start scan")
+        self.start_btn.setEnabled(False)                # needs a file first
+        self.start_btn.clicked.connect(self.run_scan)
+        header.addWidget(self.start_btn)
         header.addLayout(split)
         header.addWidget(addons_btn)
 
@@ -410,7 +415,7 @@ class MainWindow(QMainWindow):
     def choose_file(self) -> None:
         name, _ = QFileDialog.getOpenFileName(self, "Open file to scan")
         if name:
-            self.start_scan(Path(name))
+            self.load_file(Path(name))
 
     def open_addons(self) -> None:
         AddonsDialog(self).exec()
@@ -418,7 +423,7 @@ class MainWindow(QMainWindow):
     def open_history(self) -> None:
         dlg = HistoryDialog(self)
         if dlg.exec() and dlg.selected_path:
-            self.start_scan(dlg.selected_path)
+            self.load_file(dlg.selected_path)
 
     def dragEnterEvent(self, e) -> None:
         if e.mimeData().hasUrls():
@@ -432,19 +437,26 @@ class MainWindow(QMainWindow):
         self._drop_active(False)
         urls = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
         if urls:
-            self.start_scan(Path(urls[0]))
+            self.load_file(Path(urls[0]))
 
     # --- scanning ---
     def start_scan(self, path: Path) -> None:
+        """Load a file and scan it at once (command line use)."""
+        if self.load_file(path):
+            self.run_scan()
+
+    def load_file(self, path: Path) -> bool:
+        """Show a file (preview, the probes that will run) without scanning it: press Start scan."""
         if self.worker and self.worker.isRunning():
             self.statusBar().showMessage("Scan already running, please wait")
-            return
+            return False
         if not path.is_file():
             self.statusBar().showMessage(f"Not a file: {path}")
-            return
+            return False
         self.findings.clear()
         self.by_name.clear()
         self.running = None
+        self.scanning = False
         plan = planned(path)
         self.plan = [(cls.name, cls.group) for cls, _ in plan]
         self.quiet_groups = {g for g in {c.group for c, _ in plan}
@@ -455,17 +467,32 @@ class MainWindow(QMainWindow):
         self._drop_active(False)
         self.drop.setToolTip(str(path))
         self.preview.load(path, media_of(path))
-        self.detail.setHtml(self._placeholder())
         self.media = media_of(path)
         self.focus_ok = self.media in (MediaType.AUDIO, MediaType.VIDEO)
-        if not self.plan:
-            self.refresh()
-            self.statusBar().showMessage("No probes apply to this file type yet")
+        self.progress.setVisible(False)
+        self.start_btn.setText("Start scan")
+        self.start_btn.setEnabled(bool(self.plan))
+        self.detail.setHtml(self._placeholder())
+        self.refresh()
+        self.statusBar().showMessage(
+            f"{path.name} loaded: press Start scan" if self.plan else "No probes apply to this file type yet")
+        return True
+
+    def run_scan(self) -> None:
+        path = self.path
+        if not path or not self.plan or (self.worker and self.worker.isRunning()):
             return
+        self.findings.clear()
+        self.by_name.clear()
+        self.running = None
+        self.scanning = True
+        self.start_btn.setEnabled(False)
+        self.start_btn.setText("Scanning...")
         self.progress.setRange(0, len(self.plan))
         self.progress.setValue(0)
         self.progress.setVisible(True)
         self.statusBar().showMessage("Scanning...")
+        self.detail.setHtml(self._placeholder())
         self.refresh()
         self.timer.start()
         self.worker = ScanWorker(path)
@@ -492,6 +519,9 @@ class MainWindow(QMainWindow):
     def scan_done(self) -> None:
         self.timer.stop()
         self.running = None
+        self.scanning = False
+        self.start_btn.setText("Rescan")
+        self.start_btn.setEnabled(True)
         self.progress.setVisible(False)
         self.refresh()
         if not self.findings:
@@ -622,7 +652,7 @@ class MainWindow(QMainWindow):
                 it.setData(0, NAME_ROLE, name)
                 if f is None:
                     running = name == self.running
-                    it.setText(1, f"running{dots}" if running else "queued")
+                    it.setText(1, f"running{dots}" if running else ("queued" if self.scanning else "ready"))
                     it.setData(1, ROLE, C["text"] if running else C["muted"])
                     it.setForeground(0, QColor(C["text"] if running else C["muted"]))
                 else:

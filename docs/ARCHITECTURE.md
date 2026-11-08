@@ -53,10 +53,14 @@ recording), `masked_by` (sound-event categories that can imitate the signal, e.g
 ## How a scan works
 
 `runner.planned(path)` lists the probes for a file type; `scan()` runs each in its own spawned
-process (so a hang can be killed) and announces each as it starts and finishes. `sound_events` runs
+process (so a hang can be killed) and announces each as it starts and finishes. `sound_events` (shown as "sound overview") runs
 first and publishes how busy the audio is and which sound categories are present; the runner uses
 that to mark other sound probes inconclusive. Audio longer than five minutes is processed in
 overlapping chunks, with leading digital silence skipped; file-absolute times are reported.
+
+`tones_chimes` is one probe made of two analyses (`signal_tones.py`: table match plus measured pitches; `bells.py`:
+tuned-bell strikes); those classes are helpers, not probes. Opening a file only lists the probes; the
+Start scan button (or `start_scan()` from the command line) runs them.
 
 ## Scoring shown to users
 

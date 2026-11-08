@@ -39,6 +39,7 @@ def test_running_and_queued_rows_then_result_replaces_them():
     _app()
     w = MainWindow()
     w.plan = [("one", "Sounds"), ("two", "Sounds")]
+    w.scanning = True
     w.running = "one"
     w.refresh()
     g = w.tree.topLevelItem(0)

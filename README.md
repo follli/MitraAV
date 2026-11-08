@@ -1,6 +1,6 @@
 # MitraAV
 
-A local, first-step OSINT lead finder. Drop an image, audio or video file into the app. Many cheap
+A local, first-step OSINT lead finder. Drop an image, audio or video file into the app and press **Start scan**. Many cheap
 "probes" each test whether an identifying signal is present, say plainly what they found (or that
 they found nothing), and **points you to your next step**.
 
@@ -56,7 +56,7 @@ images; add `tesseract-ocr-<lang>` packs for other languages).
 ## Use
 
 ```bash
-mitraav [file]                  # the app (drop a file on it, or pass one)
+mitraav [file]                  # the app (drop a file on it, press Start scan; a file passed here scans at once)
 mitraav-scan file [--json]      # the same probes from the command line
 ```
 
@@ -72,7 +72,7 @@ in the recording offer "▶ play from here" links, so you can listen to what a p
 
 ## What it looks for
 
-- **Sounds:** what the sounds are, bird species, church bell pitch, telephone and alert tones, siren patterns.
+- **Sounds:** what the sounds are, bird species, a sound overview, bird species, **tones and chimes** (church bell pitch, telephone and alert tones, any other stable pitch measured and named), siren patterns.
 - **Aircraft and motion:** Doppler pass-bys (speed, closest distance, offsets between events) and broadband jet pass-bys.
 - **Setting and power:** 50/60 Hz mains hum, lighting flicker in video, reverberation.
 - **Text and visuals:** language, script, calling codes, web domains, currencies and units in image text; species for photos; scene type; reverse-search helper.

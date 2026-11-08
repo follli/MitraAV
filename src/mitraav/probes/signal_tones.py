@@ -10,9 +10,8 @@ from pathlib import Path
 import numpy as np
 
 from ..core.audio import AudioError, iter_chunks
-from ..core.finding import Finding, MediaType
+from ..core.finding import Finding
 from ..core.lines import Line, find_lines
-from ..core.probe import Probe
 from ..core.references import _load, follow_ups
 
 MIN_PROM = 14.0       # dB above the local floor; weaker lines are too easily coincidence
@@ -223,13 +222,10 @@ def measured_finding(name: str, tones: list[dict]) -> Finding:
           "pitch and rhythm with recordings of the suspected device.")
 
 
-class SignalTonesProbe(Probe):
+class SignalTonesProbe:
+    """Part of the combined tones_chimes probe (see tones.py); not a probe on its own."""
+
     name = "signal_tones"
-    group = "Sounds"
-    clutter_sensitive = True
-    masked_by = ("sirens",)
-    media = (MediaType.AUDIO, MediaType.VIDEO)
-    timeout = 600.0
 
     def run(self, path: Path) -> Finding:
         lines: list[Line] = []

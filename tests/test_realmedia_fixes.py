@@ -149,7 +149,7 @@ def test_a_siren_marks_pitch_and_pass_by_probes_inconclusive():
     from mitraav.probes.doppler import DopplerProbe
     from mitraav.probes.hum import HumProbe
     from mitraav.probes.passby import BroadbandPassbyProbe
-    from mitraav.probes.signal_tones import SignalTonesProbe as Tones
+    from mitraav.probes.tones import TonesChimesProbe as Tones
     shares = {"sirens": 0.62, "music": 0.05}
     for cls in (BroadbandPassbyProbe, DopplerProbe, Tones):
         note = masking_caveat(cls, shares)

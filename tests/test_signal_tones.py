@@ -73,3 +73,13 @@ def test_repeated_beeps_are_measured(tmp_path):
                                                                          for a in (2, 3, 4, 5)), secs=8, noise=0.003)
     f = SignalTonesProbe().run(p)
     assert f.detected and "1320" in f.summary and "E6" in f.summary
+
+
+def test_tones_and_chimes_is_one_probe_that_merges_both_analyses(tmp_path):
+    from mitraav.core.runner import discover_probes
+    from mitraav.probes.tones import TonesChimesProbe
+    names = [c.name for c in discover_probes()]
+    assert "tones_chimes" in names and "church_bells" not in names and "signal_tones" not in names
+    p = _wav(tmp_path, lambda t: _chime(t, 784, 2.0) + _chime(t, 659, 4.0), secs=8, noise=0.003)
+    f = TonesChimesProbe().run(p)
+    assert f.detected and "G5" in f.summary and f.regions
