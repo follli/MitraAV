@@ -13,14 +13,40 @@ recognition, no plate reading, no phone numbers or e-mail addresses echoed back)
 > don't prove useful. Expect rough edges, and treat every result as a lead, never a conclusion.
 > Feedback and bug reports are very welcome.
 
-### Examples
+## What it can see and hear
 
-**An audio fly-by (synthetic).** Results are grouped by what they tell you; the Doppler probe measures
-speed, closest distance and the time offset between events.
+- **Plant, animal and fungus species** in photos and video frames (BioCLIP add-on): candidate species
+  with links to their ranges, looked for in the whole picture and in regions of it, and confirmed across
+  video frames. People are never reported.
+- **Bird species by sound** (BirdNET add-on): species candidates plus a general region and season.
+- **What the sounds are:** a sound overview naming trains, horns, bells, sirens, aircraft, animals,
+  weather, voices and music, with the weaker guesses kept but muted.
+- **Doppler pass-bys:** speed, closest distance and the time offset between events, shown on the signal.
+- **Tones and chimes:** church bell pitch, telephone and alert tones, and any other stable pitch measured
+  and named (a lift chime, a beeper).
+- **Siren patterns** (wail, yelp, two-tone) and **broadband jet pass-bys**.
+- **Power and room:** 50/60 Hz mains hum, lighting flicker in video, and reverberation.
+- **Text in pictures:** language, script, calling codes, web domains, currencies and units, with the
+  text lines outlined (numbers are never echoed).
+- **Place type:** the kind of scene (street, shore, woodland, place of worship) as quiet context, plus a
+  reverse-search helper for the picture or frame.
+- **Location and device tags:** GPS and capture time in photos and video, opened on a map.
+- **How the file was made:** codec and platform fingerprints, JPEG history and edit traces, lossy
+  audio, silent gaps and cuts.
+
+Everything is a lead, worded as "consistent with". Numbers are ranges, not facts. Matching against
+external datasets (flight tracks, grid frequency logs, incident catalogues) is deliberately left to
+the tools the results point to.
+
+## Examples
+
+**A real recording.** A 42-minute field recording scanned in the app (the file is not included). Results
+are grouped by what they tell you; the Doppler probe measures speed, closest distance and the time
+offset between events, and the bird probe names species and a general region.
 
 ![Audio: results grouped by what they tell you](docs/screenshot-results.png)
 
-**The identified signal**, with labelled axes and a live time and frequency readout.
+**The identified signal**: the Doppler glide of one fly-by from that recording, with labelled axes and a live time and frequency readout.
 
 ![The identified signal, with labelled axes and a live time/frequency readout](docs/screenshot-signal.png)
 
@@ -69,18 +95,6 @@ finding's signal, **Image** shows the picture full size, with any text lines out
 The file you dropped stays in view: images show a thumbnail (click to enlarge), videos show a frame
 and a small player, and audio gets a player, all above the details. Findings that point at a moment
 in the recording offer "▶ play from here" links, so you can listen to what a probe flagged.
-
-## What it looks for
-
-- **Sounds:** what the sounds are, bird species, a sound overview, bird species, **tones and chimes** (church bell pitch, telephone and alert tones, any other stable pitch measured and named), siren patterns.
-- **Aircraft and motion:** Doppler pass-bys (speed, closest distance, offsets between events) and broadband jet pass-bys.
-- **Setting and power:** 50/60 Hz mains hum, lighting flicker in video, reverberation.
-- **Text and visuals:** language, script, calling codes, web domains, currencies and units in image text; species for photos; scene type; reverse-search helper.
-- **File and metadata:** EXIF and video tags, codec and platform fingerprints, JPEG history, audio history (lossy codecs, silence, edits).
-
-Everything is a lead, worded as "consistent with". Numbers are ranges, not facts. Matching against
-external datasets (flight tracks, grid frequency logs, incident catalogues) is deliberately left to
-the tools the results point to.
 
 ## Privacy
 

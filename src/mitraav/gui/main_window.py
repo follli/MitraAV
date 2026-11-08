@@ -692,7 +692,7 @@ class MainWindow(QMainWindow):
                 self.detail.setHtml("<p class='muted'>This probe has not finished yet.</p>")
             return
         label, color = _badge(f)
-        parts = [f"<h3>{html.escape(DISPLAY.get(f.probe, f.probe))} "
+        parts = [f"<h3>{html.escape(DISPLAY.get(f.probe, f.probe.replace('_', ' ')))} "
                  f'<span style="color:{color}">{html.escape(label)}</span></h3>']
         if f.detected and f.status == "ok" and f.quiet and not f.inconclusive:
             parts.append("<p class='muted'>Context only: this reports what the picture shows to the "
