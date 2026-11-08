@@ -344,6 +344,8 @@ def test_frame_dialog_scans_a_selection_with_the_picture_probes(tmp_path, monkey
     dlg.worker.wait(5000)
     _wait(100)
     assert seen and seen[0].startswith("region-") and "hello" in dlg.out.toPlainText()
+    assert dlg.table.topLevelItem(0).text(1) == "lead" and "Done: 1 lead" in dlg.status.text()
+    assert not dlg.bar.isVisible() and dlg.whole_btn.isEnabled()
     dlg.close()
 
 
