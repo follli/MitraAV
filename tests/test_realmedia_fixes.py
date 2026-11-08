@@ -95,24 +95,22 @@ def test_real_words_still_give_a_language():
     assert c["real_text"] and c["language"] == "English"
 
 
-def test_species_guess_is_withheld_for_a_building_scene(tmp_path, monkeypatch):
+def test_scene_of_reports_kind_and_probability(tmp_path, monkeypatch):
     from mitraav.probes import scene_type as st
     names, _ = st.load_labels()
     p = np.zeros(365)
     p[names.index("tower")] = 0.6
     import importlib.util
-    real = importlib.util.find_spec                    # the gate skips itself without a LiteRT runtime
+    real = importlib.util.find_spec                    # skips itself without a LiteRT runtime
     monkeypatch.setattr(importlib.util, "find_spec",
                         lambda name, *a, **k: object() if name == "ai_edge_litert" else real(name, *a, **k))
     monkeypatch.setattr(st, "classify", lambda path, mp: p)
     monkeypatch.setattr("mitraav.core.models.places_path", lambda: Path(__file__))   # "exists"
     img = tmp_path / "cathedral.png"
     Image.new("RGB", (64, 64)).save(img)
-    msg = ni._scene_gate(img)
-    assert msg and "tower" in msg and "no species" in msg
-    p[:] = 0
-    p[names.index("forest/broadleaf")] = 0.8
-    assert ni._scene_gate(img) is None                    # a woodland scene may show an organism
+    kind, label, prob = ni._scene_of(img)
+    assert kind == "landmark" and "tower" in label and prob == 0.6
+    assert ni._is_built((kind, label, prob), 0.3) and not ni._is_built(("nature", "forest", 0.9), 0.3)
 
 
 def _write(tmp_path, x, sr, name="x.wav"):

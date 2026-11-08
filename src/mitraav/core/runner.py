@@ -9,6 +9,7 @@ from dataclasses import replace
 from functools import lru_cache
 from pathlib import Path
 
+from .context import merge as merge_context
 from .finding import Finding, MediaType
 from .frames import extract_frames, ffprobe
 from .probe import Probe
@@ -74,9 +75,11 @@ def discover_probes() -> list[type[Probe]]:
     return found
 
 
-def _worker(conn, probe_cls, path):
+def _worker(conn, probe_cls, path, context=None):
     try:
-        conn.send(probe_cls().run(path))
+        probe = probe_cls()
+        probe.context = dict(context or {})
+        conn.send(probe.run(path))
     except Exception as e:  # report, never crash the scan
         conn.send(Finding(probe=probe_cls.name, detected=False, status="error",
                           detail=f"{type(e).__name__}: {e}"))
@@ -84,11 +87,11 @@ def _worker(conn, probe_cls, path):
         conn.close()
 
 
-def run_probe(probe_cls: type[Probe], path: Path) -> Finding:
+def run_probe(probe_cls: type[Probe], path: Path, context: dict | None = None) -> Finding:
     """Run one probe in its own process so a hang can be killed."""
     ctx = mp.get_context("spawn")
     parent, child = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_worker, args=(child, probe_cls, path), daemon=True)
+    proc = ctx.Process(target=_worker, args=(child, probe_cls, path, context), daemon=True)
     proc.start()
     child.close()
     try:
@@ -107,13 +110,13 @@ def run_probe(probe_cls: type[Probe], path: Path) -> Finding:
         parent.close()
     return replace(result, group=probe_cls.group, quiet=probe_cls.quiet)
 
-def run_on_frames(cls: type[Probe], path: Path) -> Finding:
+def run_on_frames(cls: type[Probe], path: Path, context: dict | None = None) -> Finding:
     """Run an image probe on sampled video frames; report the strongest result."""
     frames = extract_frames(path)
     if not frames:
         return Finding(probe=cls.name, group=cls.group, quiet=cls.quiet, detected=False, status="not_run",
                        detail="Could not extract video frames (is ffmpeg installed?)")
-    results = [(t, run_probe(cls, fp)) for t, fp in frames]
+    results = [(t, run_probe(cls, fp, context)) for t, fp in frames]
     ok = [r for r in results if r[1].status == "ok"]
     t, best = max(ok or results, key=lambda r: r[1].score)
     if best.detected:
@@ -158,8 +161,9 @@ def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
     sound overview found ({"busy": share, "shares": {...}}) so a partial run can still judge masking;
     when a partial run needs it and has none, the sound overview is run first."""
     findings = []
-    busy: float | None = (context or {}).get("busy")
-    shares: dict[str, float] = dict((context or {}).get("shares") or {})
+    ctx: dict = dict(context or {})
+    busy: float | None = (ctx.get("sound") or {}).get("busy")
+    shares: dict[str, float] = dict((ctx.get("sound") or {}).get("shares") or {})
     todo = planned(path)
     if only is not None:
         chosen = [(c, m) for c, m in todo if c.name in only]
@@ -170,10 +174,12 @@ def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
     for cls, mode in todo:
         if on_start:
             on_start(cls.name)
-        f = run_probe(cls, path) if mode == "direct" else run_on_frames(cls, path)
-        if f.meta.get("busy") is not None:
-            busy = float(f.meta["busy"])
-            shares = dict(f.meta.get("shares") or {})
+        f = run_probe(cls, path, ctx) if mode == "direct" else run_on_frames(cls, path, ctx)
+        ctx = merge_context(ctx, f.meta.get("context"))
+        sound = ctx.get("sound") or {}
+        if sound.get("busy") is not None:
+            busy = float(sound["busy"])
+            shares = dict(sound.get("shares") or {})
         if not f.caveat and f.status == "ok":
             note = masking_caveat(cls, shares)
             if note:

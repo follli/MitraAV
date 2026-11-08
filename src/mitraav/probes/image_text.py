@@ -255,7 +255,10 @@ class ImageTextProbe(Probe):
                            summary="Text was read but nothing in it points to a language or country. "
                                    + notes[-1] if notes else "Text was read but nothing in it points "
                                    "to a language or country.")
+        regions = sorted({where for key in ("phone", "domain", "currency", "units") for _, where in c[key]})
         return Finding(probe=self.name, detected=True, strength=min(1.0, 0.10 + 0.15 * specific),
+                       meta={"context": {"text": dict(language=c["language"], script=script or None,
+                                                      regions=regions)}},
                        narrows=0.3, constrains=sorted(set(cons)), effort=1, boxes=line_boxes(lines),
                        follow_ups=follow_ups("metadata", "text"),
                        summary="; ".join(notes) + ". These are hints (businesses, travellers and "

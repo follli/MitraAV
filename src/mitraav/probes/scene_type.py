@@ -106,6 +106,7 @@ class SceneTypeProbe(Probe):
     name = "scene_type"
     group = "Visual context"
     quiet = True
+    order = 10               # early: later picture probes read the scene from the shared context
     media = (MediaType.IMAGE,)
     timeout = 90.0
 
@@ -151,6 +152,9 @@ class SceneTypeProbe(Probe):
                           "zone and biome maps"}[k])
         return Finding(
             probe=self.name, detected=True, strength=float(p[order[0]]), narrows=0.05, pill="context",
+            meta={"context": {"scene": dict(path=str(path), kind=kinds[0] if kinds else None,
+                                            label=readable(names[order[0]]), p=float(p[order[0]]),
+                                            kinds=kinds)}},
             constrains=["setting"], effort=1, follow_ups=fu,
             summary="; ".join(notes) + ". This is what the picture shows to the eye, so treat it "
             "as context; the scene model is coarse and can be wrong.")

@@ -296,7 +296,7 @@ def test_partial_scan_replaces_only_its_probes_and_keeps_the_rest(monkeypatch, t
     seen = []
     monkeypatch.setattr(runner, "planned", lambda path: [(type("P", (), dict(name=n, group="g", order=1, clutter_sensitive=False,
                                                                            masked_by=(), quiet=False)), "direct") for n in ("a", "b")])
-    monkeypatch.setattr(runner, "run_probe", lambda cls, path: seen.append(cls.name) or Finding(probe=cls.name, detected=False))
+    monkeypatch.setattr(runner, "run_probe", lambda cls, path, ctx=None: seen.append(cls.name) or Finding(probe=cls.name, detected=False))
     runner.scan(tmp_path / "x", only={"b"})
     assert seen == ["b"]
 
@@ -306,9 +306,9 @@ def test_a_lead_found_under_speech_is_kept_but_a_miss_is_inconclusive(monkeypatc
     P = type("P", (), dict(name="doppler_pass", group="g", order=1, clutter_sensitive=True, masked_by=(), quiet=False))
     monkeypatch.setattr(runner, "planned", lambda path: [(P, "direct")])
     for det, expect_caveat in ((True, False), (False, True)):
-        monkeypatch.setattr(runner, "run_probe", lambda cls, path, d=det: Finding(probe=cls.name, detected=d, strength=.6,
+        monkeypatch.setattr(runner, "run_probe", lambda cls, path, ctx=None, d=det: Finding(probe=cls.name, detected=d, strength=.6,
                                                                                      narrows=.4, summary="x"))
-        f = runner.scan(tmp_path / "x", context={"busy": 0.6, "shares": {}})[0]
+        f = runner.scan(tmp_path / "x", context={"sound": {"busy": 0.6, "shares": {}}})[0]
         assert bool(f.caveat) == expect_caveat
         if not expect_caveat:
             assert "Speech or music" in f.summary and f.detected

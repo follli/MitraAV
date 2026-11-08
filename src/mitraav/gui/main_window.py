@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 
 from ..core import history
 from ..core.audio import AudioError
+from ..core.context import from_findings as context_from
 from ..core.finding import Finding, MediaType, plain
 from ..core.runner import media_of, planned, scan
 from . import theme
@@ -492,10 +493,7 @@ class MainWindow(QMainWindow):
             return
         if only is not None and not isinstance(only, (set, frozenset)):
             only = None                                  # the button's clicked(bool) lands here
-        context = None
-        prev = self.by_name.get("sound_events")
-        if only is not None and prev is not None and prev.meta.get("busy") is not None:
-            context = dict(busy=prev.meta["busy"], shares=prev.meta.get("shares") or {})
+        context = context_from(self.findings) if only is not None else None   # what earlier probes found
         if only is None:
             self.findings.clear()
             self.by_name.clear()

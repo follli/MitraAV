@@ -62,6 +62,16 @@ overlapping chunks, with leading digital silence skipped; file-absolute times ar
 tuned-bell strikes); those classes are helpers, not probes. Opening a file only lists the probes; the
 Start scan button (or `start_scan()` from the command line) runs them.
 
+## Shared context
+
+A probe can publish what it learned in `Finding.meta["context"]` (small dicts keyed by topic: `sound`,
+`scene`, `text`; see `core/context.py`). The runner merges these and passes the result to every later
+probe as `self.context`, and rebuilds it from earlier findings for a partial (per-group) run. Probes only
+read it and must work without it. In use today: the sound overview's busy share and sound classes
+(masking of other sound probes), and the scene model's whole-picture result, which `nature_id` reuses.
+`scene_type` runs early (`order = 10`) so it is available. `image_text` publishes language and country
+hints for later use.
+
 ## Scoring shown to users
 
 `Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The GUI shows

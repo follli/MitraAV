@@ -143,7 +143,7 @@ class SoundEventsProbe(Probe):
         shares = {c: min(1.0, len(w_) / max(len(windows), 1)) for c, w_ in shares.items()}
         events = summarise(agg)
         if not events:
-            return Finding(probe=self.name, detected=False, meta={"busy": busy, "shares": shares},
+            return Finding(probe=self.name, detected=False, meta={"busy": busy, "shares": shares, "context": {"sound": {"busy": busy, "shares": shares}}},
                            summary="No sound class scored clearly enough to name (generic noise, "
                                    "silence or very distant sounds).")
         by_cat: dict[str, list[dict]] = defaultdict(list)
@@ -170,7 +170,7 @@ class SoundEventsProbe(Probe):
                      "other sound probes are marked inconclusive." if busy >= 0.35 else "")
         return Finding(
             probe=self.name, detected=True, strength=strength, narrows=0.2, constrains=cons,
-            effort=1, regions=regions, follow_ups=fups, meta={"busy": busy, "shares": shares},
+            effort=1, regions=regions, follow_ups=fups, meta={"busy": busy, "shares": shares, "context": {"sound": {"busy": busy, "shares": shares}}},
             summary="Sounds consistent with: " + "; ".join(notes) + "." + busy_note + " Labels come from a small "
             "general classifier: confusable and distant sounds are often mislabelled, so treat "
             "them as leads and use the specific probes and recordings to confirm.")

@@ -1,15 +1,20 @@
 """Living things in a picture: plant, animal and fungus species candidates (BioCLIP).
 
-Optional and heavy (see core/nature.py). The whole picture is classified, so it works best on a
-close, well-framed photo of one organism, not a street scene with a tree in it. A species is a
-lead to its range (GBIF, iNaturalist), which says where it grows, not where the photo was taken.
-People are never reported.
+Optional and heavy (see core/nature.py). The whole picture and, separately, its four quarters and
+centre are classified. BioCLIP names a species for almost any picture, so the scene model first marks
+building and street scenes: a building scene is not trusted as a whole, but a region that is not
+itself clearly a building can still yield a species (a tree beside a cathedral), at a higher
+threshold. A species is a lead to its range (GBIF, iNaturalist), which says where it grows, not where
+the photo was taken. People are never reported.
 """
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from urllib.parse import quote_plus
+
+from PIL import Image
 
 from ..core.finding import Finding, FollowUp, MediaType
 from ..core.nature import INSTALL, MODEL_STR, files_present, installed
@@ -24,9 +29,16 @@ def _kingdom_word(k: str) -> str:
     return {"Plantae": "plant", "Animalia": "animal", "Fungi": "fungus"}.get(k, "organism")
 
 
-def _scene_gate(path: Path) -> str | None:
-    """BioCLIP names a species for almost any picture. If the scene model says the picture is a
-    building or street scene, no organism is the subject, so say that instead of guessing."""
+BUILT = ("street", "worship", "landmark")      # scene kinds where a species guess is usually a hallucination
+BUILT_P = 0.30                                  # whole picture: how sure the scene model must be
+TILE_BUILT_P = 0.40                             # a region this clearly a building is skipped
+MIN_TILE = 0.65                                 # regions are context-poor, so a species needs more
+REGIONS = {(0, 0): "upper left", (1, 0): "upper right", (0, 1): "lower left", (1, 1): "lower right"}
+
+
+def _scene_of(path: Path) -> tuple[str | None, str, float] | None:
+    """(kind, readable label, probability) of the scene model's top guess for this picture or region,
+    or None when the scene add-on is not installed."""
     try:
         import importlib.util
 
@@ -37,13 +49,32 @@ def _scene_gate(path: Path) -> str | None:
         p = classify(path, places_path())
         names, _ = load_labels()
         i = int(p.argmax())
-        if p[i] >= 0.30 and kind_of(names[i]) in ("street", "worship", "landmark"):
-            return (f"The picture looks like **{readable(names[i])}** ({p[i] * 100:.0f}%), a building or "
-                    "street scene rather than a close view of a plant or animal, so no species is "
-                    "suggested (BioCLIP will name a species for almost any picture).")
+        return kind_of(names[i]), readable(names[i]), float(p[i])
     except Exception:
         return None
-    return None
+
+
+def _is_built(scene, threshold: float) -> bool:
+    return bool(scene) and scene[0] in BUILT and scene[2] >= threshold
+
+
+def _crops(path: Path, workdir: Path) -> list[tuple[str, tuple[float, float, float, float], Path]]:
+    """The 2x2 quarters and the centre of a picture, saved as files: a species is looked for in each
+    region on its own, so a building in one part never hides a plant or animal in another."""
+    out = []
+    with Image.open(path) as im:
+        im = im.convert("RGB")
+        W, H = im.size
+        if min(W, H) < 160:
+            return []
+        boxes = [(f"the {REGIONS[(gx, gy)]} of the picture", (gx / 2, gy / 2, gx / 2 + 0.5, gy / 2 + 0.5))
+                 for gy in (0, 1) for gx in (0, 1)]
+        boxes.append(("the centre of the picture", (0.25, 0.25, 0.75, 0.75)))
+        for k, (name, (x0, y0, x1, y1)) in enumerate(boxes):
+            f = workdir / f"region{k}.png"
+            im.crop((int(x0 * W), int(y0 * H), int(x1 * W), int(y1 * H))).save(f)
+            out.append((name, (x0, y0, x1, y1), f))
+    return out
 
 
 class NatureIdProbe(Probe):
@@ -61,25 +92,73 @@ class NatureIdProbe(Probe):
             return Finding(probe=self.name, detected=False, status="not_run",
                            detail="BioCLIP files not downloaded (scans never download): "
                                   "run: mitraav-setup --install nature")
-        gate = _scene_gate(path)
-        if gate:
-            return Finding(probe=self.name, detected=False, info=True, summary=gate)
+        whole = None
+        ctx = (self.context or {}).get("scene")
+        if ctx and ctx.get("path") == str(path):         # the scene probe already looked at this picture
+            whole = (ctx.get("kind"), ctx.get("label", ""), float(ctx.get("p", 0.0)))
+        else:
+            whole = _scene_of(path)
+        whole_built = _is_built(whole, BUILT_P)
         os.environ["HF_HUB_OFFLINE"] = "1"                  # a scan must never touch the network
         from bioclip import Rank, TreeOfLifeClassifier
         clf = TreeOfLifeClassifier(model_str=MODEL_STR, device="cpu")
+        found: list[dict] = []
+        if not whole_built:
+            found += self._look(clf, Rank, path, "the picture", None, MIN_SPECIES, allow_genus=True)
+        workdir = Path(tempfile.mkdtemp(prefix="mitraav-nature-"))
+        skipped = 0
+        for name, box, f in _crops(path, workdir):
+            sc = _scene_of(f)
+            if _is_built(sc, TILE_BUILT_P):
+                skipped += 1
+                continue
+            found += self._look(clf, Rank, f, name, box, MIN_TILE, allow_genus=False)
+        if not found:
+            if whole_built:
+                return Finding(
+                    probe=self.name, detected=False, info=True,
+                    summary=f"The picture looks like **{whole[1]}** ({whole[2] * 100:.0f}%), a building or "
+                            "street scene, and no region of it scored clearly as a plant, animal or fungus "
+                            "(BioCLIP names a species for almost any picture, so only regions that are not "
+                            "clearly buildings are trusted).")
+            return Finding(probe=self.name, detected=False,
+                           summary="Nothing scored clearly as a plant, animal or fungus (it may be small, far "
+                                   "away, or not the main subject; people are not analysed).")
+        best = max(found, key=lambda x: x["strength"] + (0.02 if x["box"] is None else 0.0))   # the whole picture wins ties
+        where = "" if best["box"] is None else f" in {best['where']}"
+        if whole_built and best["box"] is not None:
+            where += (f" (the picture as a whole looks like {whole[1]}, so the rest was not trusted)")
+        fin = best["finding"]
+        if where:
+            key = " is consistent with" if " is consistent with" in fin.summary else " looks like"
+            fin.summary = fin.summary.replace(key, where + key, 1)
+        if best["box"] is not None:
+            x0, y0, x1, y1 = best["box"]
+            fin.boxes = [dict(label=best["label"], x0=x0, y0=y0, x1=x1, y1=y1)]
+        return fin
+
+    def _look(self, clf, Rank, path: Path, where: str, box, threshold: float, allow_genus: bool) -> list[dict]:
+        """Species candidates for one picture or region, as dicts holding a finished Finding."""
         top = clf.predict(str(path), Rank.SPECIES, k=5)
+        people = any(str(p.get("species", "")).lower() in SKIP or str(p.get("genus", "")).lower() in SKIP
+                     for p in top[:1])
         cands = [p for p in top if str(p.get("species", "")).lower() not in SKIP
                  and str(p.get("genus", "")).lower() not in SKIP]
-        if not cands:
-            return Finding(probe=self.name, detected=False,
-                           summary="No plant, animal or fungus stood out (people are not analysed).")
+        if people or not cands:
+            return []
+        fin = self._finding(cands, threshold, allow_genus)
+        if fin is None:
+            return []
+        label = (cands[0].get("species") or cands[0].get("genus") or "").strip()
+        return [dict(finding=fin, strength=fin.strength, where=where, box=box, label=label)]
+
+    def _finding(self, cands: list[dict], threshold: float, allow_genus: bool) -> Finding | None:
         best = cands[0]
         score = float(best.get("score", 0.0))
-        if score < MIN_SPECIES:
-            # fall back to the genus when several top species share it
+        if score < threshold:
             genus = best.get("genus")
             gscore = sum(float(p.get("score", 0)) for p in cands if p.get("genus") == genus)
-            if genus and gscore >= MIN_GENUS:
+            if allow_genus and genus and gscore >= MIN_GENUS:
                 names = ", ".join(f"**{p.get('species')}** ({float(p.get('score', 0)) * 100:.0f}%)"
                                   for p in cands if p.get("genus") == genus)
                 fu = [FollowUp(name=f"GBIF: {genus}", url=f"https://www.gbif.org/species/search?q={quote_plus(genus)}",
@@ -90,9 +169,7 @@ class NatureIdProbe(Probe):
                     summary=f"The {_kingdom_word(best.get('kingdom', ''))} looks like the genus **{genus}** "
                             f"(candidates: {names}); the species is uncertain. A genus gives only a "
                             "broad range. BioCLIP scores are leads, not identifications.")
-            return Finding(probe=self.name, detected=False,
-                           summary="Nothing scored clearly as a species or genus (the organism may "
-                                   "be small, far away, or not the main subject).")
+            return None
         sci = best.get("species", "")
         common = best.get("common_name") or ""
         alts = ", ".join(f"{p.get('species')} ({float(p.get('score', 0)) * 100:.0f}%)" for p in cands[1:3]

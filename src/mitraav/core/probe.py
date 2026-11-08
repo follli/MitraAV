@@ -16,6 +16,8 @@ class Probe(ABC):
     media: tuple[MediaType, ...] = (MediaType.ANY,)
     timeout: float = 10.0  # seconds; the runner enforces this
     frames_ok: bool = True  # image probes may be run on sampled video frames
+    context: dict = {}      # what earlier probes found (set by the runner; see core/context.py)
+
     @abstractmethod
     def run(self, path: Path) -> Finding:
         """Cheap test only: is the signal present, and is it worth a closer look?"""

@@ -85,3 +85,65 @@ def test_low_scores_not_a_lead(img, monkeypatch):
 def test_nature_id_also_runs_on_video_frames():
     from mitraav.probes.nature_id import NatureIdProbe
     assert NatureIdProbe.frames_ok
+
+
+def _scene_by_region(monkeypatch, whole, regions):
+    """Scene model stub: `whole` for the picture, regions[k] for region{k}.png (default: a building)."""
+    def fake(path):
+        n = path.name
+        if n.startswith("region"):
+            return regions.get(int(n[6]), ("landmark", "tower", 0.8))
+        return whole
+    monkeypatch.setattr(ni, "_scene_of", fake)
+
+
+def _ready_by_file(monkeypatch, by_name):
+    monkeypatch.setattr(ni, "installed", lambda: True)
+    monkeypatch.setattr(ni, "files_present", lambda: True)
+    mod = _fake_bioclip([])
+    mod.TreeOfLifeClassifier.predict = lambda self, path, rank, k=5: by_name.get(path.split("/")[-1], by_name["default"])
+    monkeypatch.setitem(sys.modules, "bioclip", mod)
+
+
+def test_a_building_scene_does_not_hide_a_plant_in_one_region(tmp_path, monkeypatch):
+    big = tmp_path / "cathedral.png"
+    Image.new("RGB", (400, 300), "gray").save(big)
+    _scene_by_region(monkeypatch, ("worship", "cathedral", 0.7), {1: ("nature", "forest", 0.6)})
+    ginkgo = [dict(kingdom="Plantae", genus="Ginkgo", species="Ginkgo biloba", score=0.58)]     # whole-picture hallucination
+    oak = [dict(kingdom="Plantae", genus="Quercus", species="Quercus robur", common_name="English oak", score=0.8)]
+    _ready_by_file(monkeypatch, {"default": ginkgo, "region1.png": oak})
+    f = ni.NatureIdProbe().run(big)
+    assert f.detected and "Quercus robur" in f.summary and "upper right" in f.summary
+    assert "Ginkgo" not in f.summary                         # the building-scene whole picture is not trusted
+    assert f.boxes and f.boxes[0]["x0"] == 0.5 and f.boxes[0]["y1"] == 0.5
+
+
+def test_a_building_scene_with_nothing_natural_anywhere_stays_an_info_message(tmp_path, monkeypatch):
+    big = tmp_path / "cathedral.png"
+    Image.new("RGB", (400, 300), "gray").save(big)
+    _scene_by_region(monkeypatch, ("worship", "cathedral", 0.7), {})
+    _ready_by_file(monkeypatch, {"default": [dict(kingdom="Plantae", genus="Ginkgo", species="Ginkgo biloba", score=0.58)]})
+    f = ni.NatureIdProbe().run(big)
+    assert not f.detected and f.info and "building or street scene" in f.summary
+
+
+def test_regions_need_a_higher_score_than_the_whole_picture(tmp_path, monkeypatch):
+    big = tmp_path / "x.png"
+    Image.new("RGB", (400, 300), "gray").save(big)
+    _scene_by_region(monkeypatch, ("nature", "forest", 0.7), {k: ("nature", "forest", 0.7) for k in range(5)})
+    weak = [dict(kingdom="Plantae", genus="A", species="A a", score=0.55)]               # passes for a whole picture only
+    _ready_by_file(monkeypatch, {"default": weak})
+    f = ni.NatureIdProbe().run(big)
+    assert f.detected and "upper" not in f.summary and "lower" not in f.summary and not f.boxes
+
+
+def test_scene_from_shared_context_is_used_for_the_same_picture(tmp_path, monkeypatch):
+    big = tmp_path / "c.png"
+    Image.new("RGB", (400, 300), "gray").save(big)
+    calls = []
+    monkeypatch.setattr(ni, "_scene_of", lambda p: calls.append(p.name) or ("nature", "forest", 0.7))
+    _ready_by_file(monkeypatch, {"default": [dict(kingdom="Plantae", genus="Q", species="Q r", score=0.9)]})
+    probe = ni.NatureIdProbe()
+    probe.context = {"scene": dict(path=str(big), kind="worship", label="church", p=0.8, kinds=["worship"])}
+    f = probe.run(big)
+    assert "c.png" not in calls and f.detected                 # whole-picture scene came from the context
