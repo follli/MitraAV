@@ -114,7 +114,7 @@ Follow-up links open third-party sites in your browser; MitraAV never uploads yo
 - Species and scene labels come from general models: they name things a person could also see or hear,
   and they are often wrong at the margins. Cultivated plants grow far outside their native ranges.
 - Bird range results are a general region lead from a coarse model, not a location.
-- Doppler numbers are ranges from a simplified model (no sound-travel delay in the curve shape).
+- Doppler numbers are ranges: the fit models sound-travel delay but assumes straight, level flight at constant speed with a steady tone (on synthetic fly-bys it recovers speed and slant distance to about 1-3%; real recordings are rougher).
 
 ## Credits and licences
 

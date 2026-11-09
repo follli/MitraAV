@@ -101,5 +101,5 @@ media.
 - The spectrogram dialog computes on the GUI thread (up to 240 s at a time).
 - The Doppler tracer's ridge search is pure Python and slow on very long clips.
 - Hum and pass-by analyse only the first five minutes of sound.
-- Doppler numbers come from a simplified model (no sound-travel delay in the curve shape).
+- Doppler numbers assume straight, level flight at constant speed and a steady tone; the curve includes the sound-travel delay (closed-form retarded time).
 - Windows and macOS are untested.

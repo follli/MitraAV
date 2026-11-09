@@ -26,9 +26,20 @@ MIN_RATIO = 1.08             # smaller glides are indistinguishable from driftin
 
 
 def doppler_model(t, f0, beta, t0, tau):
-    """Source passing at constant speed beta*C; tau = closest-approach distance / speed."""
-    u = (t - t0) / tau
-    return f0 / (1 + beta * u / np.sqrt(1 + u * u))
+    """Source passing at constant speed beta*C; tau = closest-approach distance / speed.
+
+    t is the time the tone is *heard*, and t0 is when the closest-approach tone is heard. The sound
+    emitted at time te arrives at te + r(te)/C, so the curve is solved for the emission time in
+    closed form (the arrival equation is a quadratic in the along-track offset s):
+        s + beta*sqrt(tau^2 + s^2) = tau_o   ->   s = (tau_o - beta*sqrt(tau_o^2 + (1-beta^2) tau^2)) / (1-beta^2)
+    with tau_o = (t - t0) + beta*tau. Ignoring the travel delay (the older simplification) biases the
+    distance and speed of fast, close pass-bys.
+    """
+    beta = np.minimum(beta, 0.95)
+    tau_o = (t - t0) + beta * tau
+    k = 1 - beta * beta
+    s = (tau_o - beta * np.sqrt(tau_o * tau_o + k * tau * tau)) / k
+    return f0 / (1 + beta * s / np.sqrt(tau * tau + s * s))
 
 
 def fit_doppler(t: np.ndarray, f: np.ndarray):
@@ -241,8 +252,8 @@ class DopplerProbe(Probe):
         notes.append("Audio alone cannot identify the aircraft. Match speed, slant distance "
                      "(not ground distance) and the offset against ADS-B tracks, shifting each "
                      "track's closest-approach time later by slant distance / 343 m/s")
-        notes.append("fit ignores sound-travel delay in the curve shape, so treat numbers as "
-                     "ranges")
+        notes.append("the fit models the sound-travel delay but assumes straight, level flight at "
+                     "constant speed and a steady engine tone, so treat numbers as ranges")
         regions = [dict(label=f"event {i + 1}: {e['hi']:.0f}→{e['lo']:.0f} Hz near {e['t0']:.0f} s",
                         t0=max(0.0, e["t_start"] - 15), t1=e["t_end"] + 15,
                         t_play=max(0.0, e["t_start"] - 3),

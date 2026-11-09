@@ -44,6 +44,35 @@ def analyse(x: np.ndarray, sr: int) -> dict[int, list[tuple[int, float, float]]]
     return out
 
 
+def enf_track(x: np.ndarray, sr: int, grid: int, harmonics: list[int], win: float = 4.0,
+              hop: float = 2.0) -> np.ndarray:
+    """Estimated supply frequency (Hz) per window: each detected harmonic h is located by a
+    zero-padded FFT with parabolic interpolation, divided by h (so a harmonic gives h times the
+    resolution), and the harmonics are combined with a median. NaN where nothing is found."""
+    n, step = int(win * sr), int(hop * sr)
+    if len(x) < n + step:
+        return np.array([])
+    w = np.hanning(n)
+    nfft = int(2 ** np.ceil(np.log2(n * 4)))
+    freqs = np.fft.rfftfreq(nfft, 1 / sr)
+    out = []
+    for a in range(0, len(x) - n, step):
+        mag = np.abs(np.fft.rfft(x[a:a + n] * w, nfft))
+        ests = []
+        for h in harmonics:
+            nominal = h
+            band = np.flatnonzero(np.abs(freqs - nominal) <= 0.5 * (nominal / grid))
+            if band.size < 3:
+                continue
+            i = band[int(np.argmax(mag[band]))]
+            if 0 < i < len(mag) - 1 and mag[i] > 0:
+                al, be, ga = np.log(mag[i - 1] + 1e-12), np.log(mag[i] + 1e-12), np.log(mag[i + 1] + 1e-12)
+                d = 0.5 * (al - ga) / (al - 2 * be + ga) if (al - 2 * be + ga) != 0 else 0.0
+                ests.append((freqs[i] + d * (freqs[1] - freqs[0])) / (h / grid))
+        out.append(float(np.median(ests)) if ests else np.nan)
+    return np.array(out)
+
+
 def _detected(grid: int, hits) -> bool:
     return len(hits) >= 2 or any(h == grid and db >= FUND_DB for h, db, _ in hits)
 
@@ -90,6 +119,14 @@ class HumProbe(Probe):
             notes.append(f"measured {fund[0]:.2f} Hz")
         if ambiguous:
             notes.append("50 and 60 Hz grids both show peaks, so treat as ambiguous")
+        if dur >= 20:
+            tr = enf_track(x, sr, best, [h for h, _, _ in hits])
+            tr = tr[~np.isnan(tr)]
+            if len(tr) >= 5:
+                notes.append(f"the frequency track runs from {tr.min():.3f} to {tr.max():.3f} Hz over "
+                             f"{dur:.0f} s (a grid frequency wanders slowly like this; a perfectly "
+                             "steady tone points to equipment or an inverter) and can be compared with "
+                             "published grid-frequency logs")
         if dur < 60:
             notes.append(f"only {dur:.0f} s analysed; ENF log matching works best with minutes")
 

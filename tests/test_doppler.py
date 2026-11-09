@@ -80,3 +80,20 @@ def test_real_clip_events(tmp_path, start, lo, hi):
     import re
     t0 = float(re.search(r"near (\d+) s", f.summary).group(1))
     assert lo <= t0 <= hi
+
+
+def test_retarded_time_model_matches_the_exact_geometry():
+    """The fitted curve must equal brute-force emission-time geometry (sound travel delay included)."""
+    import numpy as np
+
+    from mitraav.probes.doppler import C, doppler_model
+    v, d, f0, tc = 95.0, 1900.0, 100.0, 40.0
+    te = np.arange(-100, 200, 0.01)
+    r = np.sqrt((v * (te - tc)) ** 2 + d * d)
+    ta = te + r / C
+    drdt = v * v * (te - tc) / r
+    f_true = f0 / (1 + drdt / C)                          # approaching: drdt < 0 -> higher pitch
+    t_closest_heard = tc + d / C
+    sel = (ta > t_closest_heard - 40) & (ta < t_closest_heard + 40)
+    f_model = doppler_model(ta[sel], f0, v / C, t_closest_heard, d / v)
+    assert np.max(np.abs(f_model - f_true[sel])) < 0.02
