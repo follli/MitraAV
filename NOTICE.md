@@ -13,6 +13,10 @@ licence files before redistributing anything or using MitraAV commercially.
 | PyTorch, open_clip | `nature` add-on | open-source licences; installed by pip on request |
 | `jpeglib` (Martin Benes) | `stego` add-on | MPL-2.0; installed by pip on request (it bundles libjpeg builds) |
 | Steganalysis methods: chi-square attack (Westfeld and Pfitzmann), RS analysis (Fridrich, Goljan and Du), calibration attack on F5 (Fridrich, Goljan and Hogea) | `hidden_data_*` probes | published methods, re-implemented from the papers; no code copied |
+| `zxing-cpp` | `codes` add-on | Apache-2.0; installed by pip on request |
+| `faster-whisper` and the Whisper tiny model (OpenAI, converted by Systran) | `speech` add-on | MIT; installed and downloaded on request; only the language is used |
+| GS1 company-prefix ranges | `references/gs1.yaml` | compiled from the public GS1 prefix list; verify before relying on one entry |
+| NOAA solar position formulas | `core/astro.py` | public-domain algorithm, re-implemented |
 | Tesseract, FFmpeg, ExifTool | system tools | installed by you; not bundled |
 | Mains-frequency, telephone-tone and calling-code tables | reference data in `src/mitraav/references/` | compiled from public standards and references; nominal values, verify against the cited sources |
 

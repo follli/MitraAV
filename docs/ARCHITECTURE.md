@@ -89,6 +89,17 @@ carriers above 15 kHz) and `hidden_data_video` (SEI user data, lossless frames).
 lossless carriers, include a control stretch so a test without power at that size is ignored, and every
 result states what the methods cannot see (steghide, OutGuess, LSB matching and adaptive schemes).
 
+## Other signal probes
+
+`core/datatones.py` (DTMF, Morse, SSTV header, AFSK1200) and `probes/data_tones.py`; `spectrogram_text`
+(renders spectrogram windows and reads them with Tesseract); `time_cues` and `sharp_events` (the former reads
+the shared context: sound labels and bell strikes); `provenance_ai` (`core/provenance.py`: C2PA, XMP, PNG
+text prompts), `filename_clues`, `thumbnail_check`, `screen_capture`, `image_tamper` (copy-move through
+autocorrelation, ELA against local detail), `sun_moon_check` (`core/astro.py`), `video_telemetry` (GPMF, NMEA),
+`video_text_tracks`, `video_cuts`, `camera_motion`, `barcodes` (`codes` add-on), `speech_language` (`speech`
+add-on, offline) and `core/dupes.py` (near-duplicate groups for a folder). The mains-hum probe also reports speed
+changes and ENF jumps, and publishes `meta["grid"]` so the report can flag a 50 Hz hum against 60 Hz flicker.
+
 ## Scoring shown to users
 
 `Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The table shows

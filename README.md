@@ -31,6 +31,20 @@ recognition, no plate reading, no phone numbers or e-mail addresses echoed back)
 - **Place type:** the kind of scene (street, shore, woodland, place of worship) as quiet context, plus a
   reverse-search helper for the picture or frame.
 - **Location and device tags:** GPS and capture time in photos and video, opened on a map.
+- **Spoken language** (speech add-on, Whisper tiny, offline): the language and how much speech, plus place clues
+  in what was said. The transcript is never stored or shown.
+- **Signals hidden in sound:** DTMF key presses (counted, digits never shown), Morse code (decoded when clean),
+  SSTV picture headers, 1200-baud AFSK, and words drawn into the spectrogram.
+- **Time-of-day cues in sound:** clock strikes (n strikes fit n o'clock), dawn-chorus birdsong, roosters,
+  insects and frogs, plus a timeline of sharp sounds (series, bursts, echo pairs).
+- **QR codes and barcodes** (codes add-on): the kind of code, a web address's site only, map locations, and the
+  country a product barcode was registered in.
+- **Where and when, from the file:** GPS and telemetry tracks in video (GoPro, dashcam NMEA), burned-in dates and
+  coordinates in pictures, the sun's height and shadow direction and the moon's phase for the recorded time and
+  place, and clues in the file name (WhatsApp, Pixel, screenshots, YouTube ids).
+- **Provenance and edits:** C2PA Content Credentials and AI-generator prompts or tags in metadata, screenshots and
+  photos of screens, EXIF thumbnail mismatch, cloned regions and error-level outliers, scene cuts in video, speed
+  changes and splices in mains hum, and subtitle or caption text clues.
 - **Hidden data (steganography):** four probes. Appended or extra data in the file structure (after a JPEG or
   PNG ends, private chunks, oversized comments, non-empty free space, attachments and extra tracks); LSB
   replacement in lossless pictures (chi-square and RS analysis, including the transparency channel); JSteg-
@@ -98,6 +112,7 @@ images; add `tesseract-ocr-<lang>` packs for other languages).
 ```bash
 mitraav [file]                  # the app (drop a file on it, press Start scan; a file passed here scans at once)
 mitraav-scan file [--json]      # the same probes from the command line
+mitraav-scan folder --duplicates  # near-duplicate pictures, videos and recordings in a folder
 ```
 
 Results are grouped. Each probe shows a **lead** pill (it found something; "lead · very low" when faint) or an **info** pill (it ran and found nothing notable); the detail pane gives its confidence.

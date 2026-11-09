@@ -13,12 +13,29 @@ from .core.runner import scan
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="mitraav-scan", description="Cheap first-pass lead scan")
     ap.add_argument("--version", action="version", version=f"mitraav {__version__}")
-    ap.add_argument("file", type=Path)
+    ap.add_argument("file", type=Path, help="a file to scan, or a folder with --duplicates")
+    ap.add_argument("--duplicates", action="store_true",
+                    help="with a folder: list near-duplicate pictures, videos and recordings instead of scanning")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--report", type=Path, metavar="FILE",
                     help="also save a report (.md Markdown, .json JSON)")
     args = ap.parse_args(argv)
 
+    if args.duplicates:
+        if not args.file.is_dir():
+            ap.error("--duplicates needs a folder")
+        from .core.dupes import find_groups
+        groups = find_groups(args.file)
+        if args.json:
+            print(json.dumps([[str(p) for p in g] for g in groups], indent=2))
+        elif not groups:
+            print("No near-duplicates found.")
+        for i, g in enumerate(groups, 1):
+            if not args.json:
+                print(f"Group {i}:")
+                for p in g:
+                    print(f"  {p}")
+        return 0
     if not args.file.is_file():
         ap.error(f"not a file: {args.file}")
     findings = scan(args.file)
