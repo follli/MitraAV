@@ -73,17 +73,23 @@ def discover_probes() -> list[type[Probe]]:
                 and not inspect.isabstract(obj)
             ):
                 found.append(obj)
-    return found
+    from .plugins import (
+        load_enabled,  # user plugins: only those the user has enabled and not edited
+    )
+    return found + load_enabled({c.name for c in found})
 
 
-def _worker(conn, probe_cls, path, context=None):
+def _worker(conn, probe_cls, path, context=None, plugin=None, name=""):
     try:
+        if plugin:                           # a plugin class cannot be pickled: re-import it here
+            from .plugins import load_class
+            probe_cls = load_class(*plugin)
         probe = probe_cls()
         probe.context = dict(context or {})
         conn.send(probe.run(path))
     except Exception as e:  # report, never crash the scan
-        conn.send(Finding(probe=probe_cls.name, detected=False, status="error",
-                          detail=f"{type(e).__name__}: {e}"))
+        conn.send(Finding(probe=name or getattr(probe_cls, "name", "plugin"), detected=False,
+                          status="error", detail=f"{type(e).__name__}: {e}"))
     finally:
         conn.close()
 
@@ -92,7 +98,10 @@ def run_probe(probe_cls: type[Probe], path: Path, context: dict | None = None) -
     """Run one probe in its own process so a hang can be killed."""
     ctx = mp.get_context("spawn")
     parent, child = ctx.Pipe(duplex=False)
-    proc = ctx.Process(target=_worker, args=(child, probe_cls, path, context), daemon=True)
+    plugin_file = getattr(probe_cls, "_plugin_file", None)
+    args = ((child, None, path, context, (plugin_file, probe_cls.__qualname__), probe_cls.name)
+            if plugin_file else (child, probe_cls, path, context))
+    proc = ctx.Process(target=_worker, args=args, daemon=True)
     proc.start()
     child.close()
     try:
@@ -186,6 +195,9 @@ def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
             on_start(cls.name)
         f = run_probe(cls, path, ctx) if mode == "direct" else run_on_frames(cls, path, ctx)
         ctx = merge_context(ctx, f.meta.get("context"))
+        plugin_file = getattr(cls, "_plugin_file", None)
+        if plugin_file:                      # let the GUI and reports say this row came from a plugin
+            f = replace(f, meta={**f.meta, "plugin": Path(plugin_file).name})
         sound = ctx.get("sound") or {}
         if sound.get("busy") is not None:
             busy = float(sound["busy"])

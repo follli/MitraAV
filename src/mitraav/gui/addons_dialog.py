@@ -109,7 +109,12 @@ class AddonsDialog(QDialog):
         self.close_btn = QPushButton("Close")
         self.close_btn.setObjectName("secondary")
         self.close_btn.clicked.connect(self.accept)
+        plugins_btn = QPushButton("Plugin probes...")
+        plugins_btn.setObjectName("secondary")
+        plugins_btn.setToolTip("Write or add your own probes (Python files); nothing runs until you enable it")
+        plugins_btn.clicked.connect(self.open_plugins)
         row = QHBoxLayout()
+        row.addWidget(plugins_btn)
         row.addStretch(1)
         row.addWidget(self.cancel_btn)
         row.addWidget(self.close_btn)
@@ -120,6 +125,10 @@ class AddonsDialog(QDialog):
         lay.addWidget(self.log)
         lay.addLayout(row)
         self.refresh()
+
+    def open_plugins(self) -> None:
+        from .plugins_dialog import PluginsDialog
+        PluginsDialog(self).exec()
 
     def _card(self, a: addons.Addon) -> QFrame:
         card = QFrame()

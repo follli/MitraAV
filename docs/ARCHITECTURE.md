@@ -72,6 +72,14 @@ read it and must work without it. In use today: the sound overview's busy share 
 `scene_type` runs early (`order = 10`) so it is available. `image_text` publishes language and country
 hints for later use.
 
+## Plugins, reports and location hints
+
+`core/plugins.py` discovers user plugin files (listed by reading, loaded only when enabled and unchanged
+since enabling; see docs/PLUGINS.md) and `plugin.py` is their public API. A plugin probe runs through
+the same `run_probe` process as any other (its class is re-imported inside the child). `core/geo.py` turns
+GPS tags, bird ranges and text clues into coarse macro-region hints (`meta["geo"]`); `core/report.py`
+combines them (support, disagreements worded as questions) and writes the Markdown and JSON reports.
+
 ## Scoring shown to users
 
 `Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The table shows

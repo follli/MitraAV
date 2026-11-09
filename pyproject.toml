@@ -48,7 +48,7 @@ mitraav-setup = "mitraav.setup_models:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-mitraav = ["references/*.yaml", "references/*.txt"]
+mitraav = ["references/*.yaml", "references/*.txt", "templates/*.py"]
 
 [tool.ruff]
 line-length = 100

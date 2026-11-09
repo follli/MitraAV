@@ -67,7 +67,8 @@ def test_real_phone_formats_still_found():
 
 def test_script_and_language_choose_the_pivot_links():
     from mitraav.probes.image_text import script_follow_ups
-    names = lambda s, l=None: [u.name for u in script_follow_ups(s, l)]  # noqa: E731
+    def names(script, language=None):
+        return [u.name for u in script_follow_ups(script, language)]
     assert "Yandex Maps" in names("Cyrillic") and "Google Translate" in names("Cyrillic")
     assert "Baidu Maps" in names("Han") and "Naver Map" in names("Han")
     assert names("Latin", "English") == []                      # English Latin text needs no translator

@@ -100,6 +100,19 @@ The file you dropped stays in view: images show a thumbnail (click to enlarge), 
 and a small player, and audio gets a player, all above the details. Findings that point at a moment
 in the recording offer "▶ play from here" links, so you can listen to what a probe flagged.
 
+## Your own probes
+
+Anyone can add a probe: write a Python file, drop it in the plugins folder and enable it under **Add-ons >
+Plugin probes**. Plugins are code that runs with your permissions, so nothing loads until you enable it
+and an edited file is switched off again. See [docs/PLUGINS.md](docs/PLUGINS.md) for the guide and API.
+
+## Reports
+
+**Export** (or `mitraav-scan file --report out.md`) saves a Markdown or JSON report: where the clues point
+(coarse location hints, cross-checked against each other, with possible disagreements flagged as
+questions), the top three leads, other leads, what was inconclusive, and what was checked with nothing
+found. The **Summary** row at the top of the results shows the same cross-check.
+
 ## Privacy
 
 Scans run on your machine and make no network calls. The only network use is installing an add-on

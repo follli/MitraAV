@@ -762,6 +762,8 @@ class MainWindow(QMainWindow):
         label, color = _badge(f)
         parts = [f"<h3>{html.escape(DISPLAY.get(f.probe, f.probe.replace('_', ' ')))} "
                  f'<span style="color:{color}">{html.escape(label)}</span></h3>']
+        if f.meta.get("plugin"):
+            parts.append(f"<p class='muted'>Plugin probe from {html.escape(str(f.meta['plugin']))}.</p>")
         if f.detected and f.status == "ok" and f.quiet and not f.inconclusive:
             parts.append("<p class='muted'>Context only: this reports what the picture shows to the "
                          "eye, so it is not counted as a lead.</p>")
