@@ -44,3 +44,13 @@ video:
   - name: MediaInfo
     url: https://mediaarea.net/en/MediaInfo
     note: Readable list of every track and container tag, including unusual ones.
+datatones:
+  - name: multimon-ng
+    url: https://github.com/EliasOenal/multimon-ng
+    note: Decodes DTMF, AFSK (APRS, packet radio), POCSAG pagers and more from an audio file.
+  - name: QSSTV
+    url: https://github.com/ON4QZ/QSSTV
+    note: Decodes slow-scan television pictures from audio (also RX-SSTV on Windows).
+  - name: fldigi
+    url: https://sourceforge.net/projects/fldigi/
+    note: Decodes Morse (CW), RTTY and many other amateur-radio modes from audio.
