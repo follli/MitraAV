@@ -1,0 +1,18 @@
+c2pa:
+  - name: Content Credentials verify
+    url: https://contentcredentials.org/verify
+    note: Upload the file yourself to check a C2PA manifest's signature and edit history. MitraAV reports that a manifest exists, it does not verify it.
+  - name: c2patool
+    url: https://github.com/contentauth/c2patool
+    note: Open-source command-line tool that reads and verifies C2PA manifests locally.
+ai:
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Print every metadata field, including XMP history and PNG text chunks (exiftool -a -u -G1).
+  - name: Reverse image search
+    url: https://lens.google.com
+    note: Look for the image or its source elsewhere; AI-generated images often appear on generator galleries. You upload it yourself.
+filename:
+  - name: YouTube watch page
+    url: https://www.youtube.com/watch
+    note: Append ?v=<id> with the 11-character id found in the file name to open the original video page.

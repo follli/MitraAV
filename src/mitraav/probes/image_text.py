@@ -16,8 +16,8 @@ from pathlib import Path
 
 from PIL import Image
 
-from ..core.finding import Finding, MediaType
-from ..core.geo import hint, macros_for_phrase
+from ..core.finding import Finding, FollowUp, MediaType
+from ..core.geo import hint, macros_for_latlon, macros_for_phrase
 from ..core.probe import Probe
 from ..core.references import _load, follow_ups
 
@@ -39,6 +39,46 @@ MIN_TEXT_SHARE = 0.45     # ...and they must be a good share of what OCR returne
 PLATE = re.compile(r"^(?=.*[A-Za-z])(?=.*\d)[A-Za-z0-9-]{5,9}$")
 PHONE = re.compile(r"(?<![\w+])\+\s?(\d{1,3})((?:[\s().-]*\d){6,})")
 DOMAIN = re.compile(r"\b[\w-]+(?:\.[\w-]+)*\.([a-z]{2})(?:\.[a-z]{2})?(?=[/\s,;:]|$)", re.IGNORECASE)
+
+
+DATE_RX = re.compile(
+    r"\b(?:(20\d{2})[-/.](0[1-9]|1[0-2])[-/.](0[1-9]|[12]\d|3[01])|(0[1-9]|[12]\d|3[01])[-/.](0[1-9]|1[0-2])[-/.](20\d{2}))"
+    r"(?:[ T]+([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?)?\b")
+DEC_COORD = re.compile(r"(?<![\d.])([-+]?\d{1,2}\.\d{4,8})\s*\u00b0?\s*([NSns])?[\s,;/]+([-+]?\d{1,3}\.\d{4,8})\s*\u00b0?\s*([EWew])?(?![\d.])")
+DMS_COORD = re.compile(r"(\d{1,2})\s*[\u00b0\*]\s*(\d{1,2})\s*['\u2032]\s*(\d{1,2}(?:\.\d+)?)\s*[\"\u2033]?\s*([NSns])"
+                       r"[\s,;/]+(\d{1,3})\s*[\u00b0\*]\s*(\d{1,2})\s*['\u2032]\s*(\d{1,2}(?:\.\d+)?)\s*[\"\u2033]?\s*([EWew])")
+PRE_COORD = re.compile(r"(?<![A-Za-z])([NSns])\s*([-+]?\d{1,2}\.\d{4,8})\s*\u00b0?[\s,;/]+([EWew])\s*([-+]?\d{1,3}\.\d{4,8})(?![\d.])")
+MARKS = {"shutterstock": "Shutterstock", "getty": "Getty Images", "alamy": "Alamy", "istock": "iStock",
+         "dreamstime": "Dreamstime", "depositphotos": "Depositphotos", "reuters": "Reuters", "afp": "AFP",
+         "tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube", "telegram": "Telegram",
+         "whatsapp": "WhatsApp", "facebook": "Facebook", "twitter": "Twitter", "snapchat": "Snapchat",
+         "dashcam": "a dashcam", "gopro": "GoPro", "dji": "DJI"}
+
+
+def parse_coords(text: str) -> list[tuple[float, float]]:
+    """Latitude and longitude written in the picture (decimal or degrees-minutes-seconds), validated."""
+    out: list[tuple[float, float]] = []
+    for m in DEC_COORD.finditer(text):
+        lat, lon = float(m[1]), float(m[3])
+        if (m[2] or "").upper() == "S":
+            lat = -abs(lat)
+        if (m[4] or "").upper() == "W":
+            lon = -abs(lon)
+        if abs(lat) <= 90 and abs(lon) <= 180 and (m[2] or m[4] or "," in m[0] or ";" in m[0] or "-" in m[0]):
+            out.append((lat, lon))
+    for m in PRE_COORD.finditer(text):
+        lat = -abs(float(m[2])) if m[1].upper() == "S" else float(m[2])
+        lon = -abs(float(m[4])) if m[3].upper() == "W" else float(m[4])
+        if abs(lat) <= 90 and abs(lon) <= 180:
+            out.append((lat, lon))
+    for m in DMS_COORD.finditer(text):
+        lat = int(m[1]) + int(m[2]) / 60 + float(m[3]) / 3600
+        lon = int(m[5]) + int(m[6]) / 60 + float(m[7]) / 3600
+        lat = -lat if m[4].upper() == "S" else lat
+        lon = -lon if m[8].upper() == "W" else lon
+        if abs(lat) <= 90 and abs(lon) <= 180:
+            out.append((lat, lon))
+    return list(dict.fromkeys(out))[:3]
 
 
 def scales_for(size: tuple[int, int]) -> list[float]:
@@ -168,7 +208,14 @@ def clues(words: list[tuple[str, int]]) -> dict:
     text = " ".join(good)
     tables = _load("codes")
     out = {"phone": [], "domain": [], "currency": [], "units": [], "language": None,
-           "plates": 0, "words": []}
+           "plates": 0, "words": [], "timestamps": [], "coords": [], "marks": []}
+    for m in DATE_RX.finditer(text):
+        stamp = m[0].replace("T", " ")
+        if stamp not in out["timestamps"]:
+            out["timestamps"].append(stamp)
+    out["coords"] = parse_coords(text)
+    low_text = text.lower()
+    out["marks"] = [name for key, name in MARKS.items() if re.search(rf"(?<![a-z]){key}(?![a-z])", low_text)]
     for m in PHONE.finditer(text):
         if not plausible_phone(m[1] + m[2]):
             continue
@@ -231,8 +278,8 @@ class ImageTextProbe(Probe):
         c = clues(words)
         good = [w for w, conf in words if conf >= MIN_CONF]
         c_pre = c
-        if len(good) < 2 or not (c_pre["real_text"] or c_pre["phone"] or c_pre["domain"]
-                                 or c_pre["currency"] or c_pre["units"]):
+        if len(good) < 2 or not (c_pre["real_text"] or c_pre["phone"] or c_pre["domain"] or c_pre["currency"]
+                                 or c_pre["units"] or c_pre["timestamps"] or c_pre["coords"] or c_pre["marks"]):
             return Finding(probe=self.name, detected=False, info=True,
                            summary="No readable text found (too small, blurred, stylised or not "
                                    "horizontal; foliage and other texture can fool OCR, which is "
@@ -258,24 +305,41 @@ class ImageTextProbe(Probe):
         for u, where in c["units"]:
             notes.append(f"the unit **'{u}'** appears, consistent with {where}")
             cons.append("region")
+        for stamp in c["timestamps"][:3]:
+            notes.append(f"a burned-in date or time stamp reads **{stamp}** (check it against the file's own dates)")
+            cons.append("date")
+        for lat, lon in c["coords"][:2]:
+            notes.append(f"coordinates written in the picture read **{lat:.5f}, {lon:.5f}**")
+            cons.append("location")
+        if c["marks"]:
+            notes.append(f"visible text names {', '.join(c['marks'][:3])} (a watermark, logo or overlay from that source)")
         if c["words"]:
             notes.append("readable words include: " + ", ".join(c["words"][:12]))
         if c["plates"]:
             notes.append(f"{c['plates']} string(s) look like number plates and are not shown")
         specific = len(c["phone"]) + len(c["domain"]) + len(c["currency"]) + len(c["units"]) \
-            + (1 if c["language"] else 0) + (1 if script and script != "Latin" else 0)
+            + (1 if c["language"] else 0) + (1 if script and script != "Latin" else 0) \
+            + len(c["timestamps"][:3]) + 2 * len(c["coords"][:2]) + (1 if c["marks"] else 0)
         if not specific:
             return Finding(probe=self.name, detected=False,
                            summary="Text was read but nothing in it points to a language or country. "
                                    + notes[-1] if notes else "Text was read but nothing in it points "
                                    "to a language or country.")
         regions = sorted({where for key in ("phone", "domain", "currency", "units") for _, where in c[key]})
+        geo = None
+        if c["coords"]:
+            lat, lon = c["coords"][0]
+            geo = hint(f"coordinates in the picture ({lat:.2f}, {lon:.2f})", macros_for_latlon(lat, lon), 0.8)
+        elif regions:
+            geo = hint("text clues: " + ", ".join(regions[:3]),
+                       set().union(*(macros_for_phrase(r) for r in regions)), min(0.35, 0.15 * len(regions)))
+        extra_ups = [FollowUp("OpenStreetMap at these coordinates",
+                              f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}#map=16/{lat}/{lon}")
+                     for lat, lon in c["coords"][:1]]
         return Finding(probe=self.name, detected=True, strength=min(1.0, 0.10 + 0.15 * specific),
                        meta={"context": {"text": dict(language=c["language"], script=script or None,
                                                       regions=regions)},
-                             "geo": hint("text clues: " + ", ".join(regions[:3]),
-                                         set().union(*(macros_for_phrase(r) for r in regions)) if regions else set(),
-                                         min(0.35, 0.15 * len(regions)))},
+                             "geo": geo},
                        narrows=0.3, constrains=sorted(set(cons)), effort=1, boxes=line_boxes(lines),
-                       follow_ups=follow_ups("metadata", "text") + script_follow_ups(script, c["language"]),
+                       follow_ups=follow_ups("metadata", "text") + script_follow_ups(script, c["language"]) + extra_ups,
                        summary="; ".join(notes) + ". Hints only: global services use foreign codes and currencies.")
