@@ -202,6 +202,19 @@ def clues(words: list[tuple[str, int]]) -> dict:
     return out
 
 
+def script_follow_ups(script: str, language: str | None):
+    """Pivots that suit the script or language of the text (maps and search engines that cover those
+    regions, and translators). Pointers only: nothing is opened or sent from here."""
+    ups = []
+    if script == "Cyrillic":
+        ups += follow_ups("visual", "script_cyrillic")
+    if script in ("Han", "Japanese", "Hangul", "Chinese", "Korean"):
+        ups += follow_ups("visual", "script_cjk")
+    if (script and script != "Latin") or (language and language.lower() != "english"):
+        ups += follow_ups("visual", "translate")
+    return ups
+
+
 class ImageTextProbe(Probe):
     name = "image_text"
     group = "Text and visuals"
@@ -264,5 +277,5 @@ class ImageTextProbe(Probe):
                                          set().union(*(macros_for_phrase(r) for r in regions)) if regions else set(),
                                          min(0.35, 0.15 * len(regions)))},
                        narrows=0.3, constrains=sorted(set(cons)), effort=1, boxes=line_boxes(lines),
-                       follow_ups=follow_ups("metadata", "text"),
+                       follow_ups=follow_ups("metadata", "text") + script_follow_ups(script, c["language"]),
                        summary="; ".join(notes) + ". Hints only: global services use foreign codes and currencies.")

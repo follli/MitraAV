@@ -63,3 +63,12 @@ def test_real_phone_formats_still_found():
     for txt, code in (("+44 20 7946 0958", "44"), ("+33 1 23 45 67 89", "33"), ("+1 (555) 123-4567", "1")):
         c = clues([(w, 90) for w in txt.split()])
         assert c["phone"] and c["phone"][0][0] == code, txt
+
+
+def test_script_and_language_choose_the_pivot_links():
+    from mitraav.probes.image_text import script_follow_ups
+    names = lambda s, l=None: [u.name for u in script_follow_ups(s, l)]  # noqa: E731
+    assert "Yandex Maps" in names("Cyrillic") and "Google Translate" in names("Cyrillic")
+    assert "Baidu Maps" in names("Han") and "Naver Map" in names("Han")
+    assert names("Latin", "English") == []                      # English Latin text needs no translator
+    assert names("Latin", "German") == ["Google Translate", "DeepL Translator"]

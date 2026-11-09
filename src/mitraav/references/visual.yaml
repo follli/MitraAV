@@ -14,6 +14,12 @@ street:
   - name: Geolocation methods (Exposing the Invisible)
     url: https://kit.exposingtheinvisible.org/en/geolocation.html
     note: Step-by-step guide to matching a picture to a place.
+  - name: Mapillary
+    url: https://www.mapillary.com
+    note: Crowd-sourced street-level photos, useful where other street imagery is missing. A third-party site that may log your visit; MitraAV uploads nothing.
+  - name: KartaView
+    url: https://kartaview.org
+    note: Another open street-level imagery source to compare with.
 worship:
   - name: Church architecture
     url: https://en.wikipedia.org/wiki/Church_architecture
@@ -47,3 +53,25 @@ nature:
   - name: Biome
     url: https://en.wikipedia.org/wiki/Biome
     note: Terrestrial biomes and typical vegetation.
+
+script_cyrillic:
+  - name: Yandex Maps
+    url: https://yandex.com/maps
+    note: Strong coverage of Russia and neighbouring countries where other maps are thin. Third-party site; it may log your visit.
+  - name: Yandex Images
+    url: https://yandex.com/images
+    note: Reverse image search that often finds Eastern European material others miss. You upload the picture yourself.
+script_cjk:
+  - name: Baidu Maps
+    url: https://map.baidu.com
+    note: Map and place data for mainland China (the interface is in Chinese; use a browser translator). Third-party site.
+  - name: Naver Map
+    url: https://map.naver.com
+    note: Map and place data for South Korea. Third-party site.
+translate:
+  - name: Google Translate
+    url: https://translate.google.com
+    note: Translate the words the text reader found (type them in yourself; nothing is sent from here).
+  - name: DeepL Translator
+    url: https://www.deepl.com/translator
+    note: A second opinion on a translation; compare both.
