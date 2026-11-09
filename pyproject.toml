@@ -35,6 +35,8 @@ dev = ["pytest", "ruff", "build", "twine"]
 sound = ["ai-edge-litert"]
 birds = ["birdnet>=1.4"]
 stego = ["jpeglib"]
+codes = ["zxing-cpp"]
+speech = ["faster-whisper"]
 nature = ["pybioclip>=2"]            # heavy: install the CPU build of torch first (see mitraav-setup)
 all = ["ai-edge-litert", "birdnet>=1.4"]
 

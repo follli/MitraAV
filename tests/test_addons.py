@@ -13,7 +13,7 @@ from mitraav.setup_models import DEFAULTS
 
 def test_registry_has_the_four_addons_and_bioclip_is_heavy_and_last():
     keys = [a.key for a in addons.registry()]
-    assert keys == ["sounds", "scene", "birds", "stego", "nature"]
+    assert keys == ["sounds", "scene", "birds", "speech", "codes", "stego", "nature"]
     nature = addons.by_key("nature")
     assert nature.heavy and "1.7 GB" in nature.size
     first = nature.steps[0].command()
@@ -54,7 +54,7 @@ def test_dialog_lists_addons_and_hides_install_when_installed(monkeypatch):
     monkeypatch.setattr(addons.Addon, "status", lambda self: "installed" if self.key != "nature" else "not installed")
     d = AddonsDialog()
     d.show()
-    assert set(d.rows) == {"sounds", "scene", "birds", "stego", "nature"}
+    assert set(d.rows) == {"sounds", "scene", "birds", "speech", "codes", "stego", "nature"}
     assert d.rows["nature"][1].isVisibleTo(d) and d.rows["nature"][1].text() == "Install"
     assert not d.rows["sounds"][1].isVisibleTo(d)
     assert "installed" in d.rows["sounds"][0].text()

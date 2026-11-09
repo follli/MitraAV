@@ -84,6 +84,8 @@ Optional pieces are **add-ons**. Install them from the **Add-ons** button in the
 | `sounds` | names sounds: trains, horns, bells, sirens, aircraft, animals, weather | about 25 MB |
 | `scene` | names the kind of place in a picture, as quiet context | about 45 MB |
 | `birds` | bird ID by sound, plus a general region and season | about 150 MB |
+| `speech` | identifies the spoken language offline (Whisper tiny); the transcript is never shown | about 120 MB |
+| `codes` | reads QR codes and product barcodes (web addresses show only the site) | about 3 MB |
 | `stego` | JPEG hidden-data tests on DCT coefficients (JSteg- and F5-style), via `jpeglib` | about 80 MB |
 | `nature` | species candidates for photos of plants, animals, fungi (BioCLIP) | about 1.7 GB, off by default |
 

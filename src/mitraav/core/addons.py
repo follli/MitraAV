@@ -14,7 +14,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from . import models, nature
+from . import models, nature, speech
 
 Progress = Callable[[str], None]
 
@@ -108,6 +108,16 @@ def registry() -> list[Addon]:
                Step("BirdNET models (about 120 MB)", _birds_files,
                     py("import birdnet\nbirdnet.load('acoustic','2.4','tf',library='litert')\n"
                        "birdnet.load('geo','2.4','tf',library='litert')"))]),
+        Addon("speech", "Spoken language",
+              "Identifies the language spoken in a recording offline (Whisper tiny via faster-whisper). Only the language and place clues are reported, never the transcript.",
+              "about 120 MB",
+              [Step("faster-whisper package", speech.installed, pip("faster-whisper")),
+               Step("Whisper tiny model (about 75 MB)", speech.files_present,
+                    py("from mitraav.core import speech; speech.download()"))]),
+        Addon("codes", "QR codes and barcodes",
+              "Reads QR codes and product barcodes in pictures and video frames offline (zxing-cpp); web addresses show only the site.",
+              "about 3 MB",
+              [Step("zxing-cpp package", lambda: _has("zxingcpp"), pip("zxing-cpp"))]),
         Addon("stego", "JPEG steganalysis",
               "Tests a JPEG's DCT coefficients for JSteg-style and F5-style hidden data (jpeglib, licensed MPL). Other hidden-data checks need nothing extra.",
               "about 80 MB",
