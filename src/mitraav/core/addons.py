@@ -108,6 +108,11 @@ def registry() -> list[Addon]:
                Step("BirdNET models (about 120 MB)", _birds_files,
                     py("import birdnet\nbirdnet.load('acoustic','2.4','tf',library='litert')\n"
                        "birdnet.load('geo','2.4','tf',library='litert')"))]),
+        Addon("stego", "JPEG steganalysis",
+              "Tests a JPEG's DCT coefficients for JSteg-style and F5-style hidden data (jpeglib, licensed MPL). Other hidden-data checks need nothing extra.",
+              "about 80 MB",
+              [Step("jpeglib package (bundles libjpeg builds, about 80 MB)", lambda: _has("jpeglib"),
+                    pip("jpeglib"))]),
         Addon("nature", "Plants and animals (BioCLIP)",
               "Suggests species for a photo of a plant, animal or fungus, with range links. Heavy: CPU PyTorch, BioCLIP weights and species embeddings.",
               "about 1.7 GB",

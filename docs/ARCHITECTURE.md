@@ -80,6 +80,15 @@ the same `run_probe` process as any other (its class is re-imported inside the c
 GPS tags, bird ranges and text clues into coarse macro-region hints (`meta["geo"]`); `core/report.py`
 combines them (support, disagreements worded as questions) and writes the Markdown and JSON reports.
 
+## Hidden-data probes
+
+Group "Hidden data": `hidden_data_container` (file structure, `core/stego_container.py`), `hidden_data_pixels`
+(chi-square and RS on lossless pictures, `core/stego_stats.py`; DCT tests for JPEG through the optional
+`stego` add-on, `core/stego_dct.py`), `hidden_data_audio` (lowest-bit tests on lossless 16-bit audio, near-silence,
+carriers above 15 kHz) and `hidden_data_video` (SEI user data, lossless frames). Statistical tests apply only to
+lossless carriers, include a control stretch so a test without power at that size is ignored, and every
+result states what the methods cannot see (steghide, OutGuess, LSB matching and adaptive schemes).
+
 ## Scoring shown to users
 
 `Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The table shows

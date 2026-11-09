@@ -31,6 +31,13 @@ recognition, no plate reading, no phone numbers or e-mail addresses echoed back)
 - **Place type:** the kind of scene (street, shore, woodland, place of worship) as quiet context, plus a
   reverse-search helper for the picture or frame.
 - **Location and device tags:** GPS and capture time in photos and video, opened on a map.
+- **Hidden data (steganography):** four probes. Appended or extra data in the file structure (after a JPEG or
+  PNG ends, private chunks, oversized comments, non-empty free space, attachments and extra tracks); LSB
+  replacement in lossless pictures (chi-square and RS analysis, including the transparency channel); JSteg-
+  and F5-style changes in JPEGs (stego add-on); LSB data, bits hidden in near-silence and carriers above 15 kHz
+  in sound; and unfamiliar user-data SEI payloads, extra tracks and LSB tests on lossless video. Methods built
+  to defeat these tests (steghide, OutGuess, LSB matching, adaptive schemes) are not detected, and the
+  results say so.
 - **How the file was made:** codec and platform fingerprints, JPEG history and edit traces, lossy
   audio, silent gaps and cuts.
 
@@ -77,6 +84,7 @@ Optional pieces are **add-ons**. Install them from the **Add-ons** button in the
 | `sounds` | names sounds: trains, horns, bells, sirens, aircraft, animals, weather | about 25 MB |
 | `scene` | names the kind of place in a picture, as quiet context | about 45 MB |
 | `birds` | bird ID by sound, plus a general region and season | about 150 MB |
+| `stego` | JPEG hidden-data tests on DCT coefficients (JSteg- and F5-style), via `jpeglib` | about 80 MB |
 | `nature` | species candidates for photos of plants, animals, fungi (BioCLIP) | about 1.7 GB, off by default |
 
 System tools come from your package manager (the app and `mitraav-setup --list` say what is missing):

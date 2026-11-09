@@ -1,0 +1,46 @@
+# Follow-ups for the hidden-data probes. They point at tools; MitraAV never extracts or cracks anything.
+appended:
+  - name: binwalk
+    url: https://github.com/ReFirmLabs/binwalk
+    note: Scans a file for embedded and appended files and can carve them out for you to inspect.
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Lists every metadata block, including unknown and oversized ones (use -a -u -G1).
+metadata:
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Full tag dump, including unknown and private blocks (use -a -u -G1).
+  - name: binwalk
+    url: https://github.com/ReFirmLabs/binwalk
+    note: Finds files hidden inside other files.
+image_lsb:
+  - name: zsteg
+    url: https://github.com/zed-0xff/zsteg
+    note: Tries the common LSB layouts of PNG and BMP files and prints what it can decode.
+  - name: Aletheia
+    url: https://github.com/daniellerch/aletheia
+    note: Open-source steganalysis toolbox with trained detectors for LSB, Steghide, F5, OutGuess and others.
+  - name: StegExpose
+    url: https://github.com/b3dk7/StegExpose
+    note: A second opinion on LSB steganography in lossless images (its detection power is modest).
+image_dct:
+  - name: Aletheia
+    url: https://github.com/daniellerch/aletheia
+    note: Trained detectors for JPEG methods (Steghide, OutGuess, nsF5, J-UNIWARD) that simple statistics cannot see.
+  - name: ExifTool
+    url: https://exiftool.org
+    note: Compare quantisation tables and tags against the camera that supposedly made the file.
+audio:
+  - name: Sonic Visualiser
+    url: https://www.sonicvisualiser.org
+    note: Spectrogram viewer for looking at very high or very low frequencies, text or pictures drawn into the spectrum.
+  - name: Audacity
+    url: https://www.audacityteam.org
+    note: Spectrogram view and filters; also shows the exact sample values near silence.
+video:
+  - name: FFmpeg / ffprobe
+    url: https://ffmpeg.org/ffprobe.html
+    note: "Use `ffprobe -show_streams -show_packets` to list every stream, attachment and data track."
+  - name: MediaInfo
+    url: https://mediaarea.net/en/MediaInfo
+    note: Readable list of every track and container tag, including unusual ones.

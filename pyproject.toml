@@ -34,6 +34,7 @@ Issues = "https://github.com/follli/MitraAV/issues"
 dev = ["pytest", "ruff", "build", "twine"]
 sound = ["ai-edge-litert"]
 birds = ["birdnet>=1.4"]
+stego = ["jpeglib"]
 nature = ["pybioclip>=2"]            # heavy: install the CPU build of torch first (see mitraav-setup)
 all = ["ai-edge-litert", "birdnet>=1.4"]
 
