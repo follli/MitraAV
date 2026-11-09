@@ -15,6 +15,7 @@ from urllib.parse import quote_plus
 from ..core.audio import AudioError, total_seconds
 from ..core.birdworker import geo_model_path, human_segments, model_path, summarise
 from ..core.finding import Finding, FollowUp, MediaType
+from ..core.geo import BIRD_REGIONS, hint
 from ..core.probe import Probe
 from ..core.references import follow_ups
 
@@ -99,8 +100,14 @@ class BirdProbe(Probe):
         regions = [dict(label=f"{s['common']} {s['t0']:.0f}-{s['t1']:.0f} s",
                         t0=max(0.0, s["t0"] - 2), t1=s["t1"] + 2, f0=500.0, f1=10000.0)
                    for s in top]
+        bird_hint = None
+        if geo and geo.get("regions") and not (humans >= 10 and len(sp) < 3):
+            best_r, near = geo["regions"][0], [r for r in geo["regions"][1:3] if r["fit"] >= 0.37]
+            macros = set().union(*(BIRD_REGIONS.get(r["region"], set()) for r in [best_r] + near))
+            bird_hint = hint("birdsong: " + best_r["region"], macros, 0.5 if not near else 0.35)
         return Finding(
             probe=self.name, detected=True, strength=strength, narrows=0.35,
+            meta={"geo": bird_hint} if bird_hint else {},
             constrains=["region", "season"], effort=2, regions=regions, follow_ups=fu,
             summary="BirdNET scores suggest: " + "; ".join(names)
             + (f". BirdNET also heard human voices in **{humans} segments**, which can hide quiet "

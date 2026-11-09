@@ -29,6 +29,7 @@ from ..core import history
 from ..core.audio import AudioError
 from ..core.context import from_findings as context_from
 from ..core.finding import Finding, MediaType, plain
+from ..core.report import location_summary, to_json, to_markdown
 from ..core.runner import media_of, planned, scan
 from . import theme
 from .addons_dialog import AddonsDialog
@@ -44,6 +45,7 @@ DISPLAY = {"tones_chimes": "tones and chimes", "sound_events": "sound overview"}
 ROLE = Qt.UserRole
 NAME_ROLE = Qt.UserRole + 1
 LAST_GROUP = "File and metadata"
+SUMMARY_KEY = "__summary__"
 
 COLUMN_TIPS = [
     "The probe that ran.",
@@ -308,6 +310,12 @@ class MainWindow(QMainWindow):
         self.start_btn.clicked.connect(self.run_scan)
         header.addWidget(self.start_btn)
         header.addLayout(split)
+        self.export_btn = QPushButton("Export")
+        self.export_btn.setObjectName("secondary")
+        self.export_btn.setToolTip("Save a report of this scan (Markdown or JSON)")
+        self.export_btn.setEnabled(False)
+        self.export_btn.clicked.connect(self.export_report)
+        header.addWidget(self.export_btn)
         header.addWidget(addons_btn)
 
         self.preview = MediaPreview()
@@ -395,6 +403,21 @@ class MainWindow(QMainWindow):
         if name:
             self.load_file(Path(name))
 
+    def export_report(self) -> None:
+        if not self.path or not self.findings:
+            return
+        name, flt = QFileDialog.getSaveFileName(
+            self, "Save report", str(self.path.with_suffix("")) + "-mitraav.md",
+            "Markdown (*.md);;JSON (*.json)")
+        if not name:
+            return
+        out = Path(name)
+        as_json = out.suffix.lower() == ".json" or "JSON" in flt
+        text = (to_json(self.path, self.findings) if as_json else
+                to_markdown(self.path, self.findings, lambda n: DISPLAY.get(n, n.replace("_", " "))))
+        out.write_text(text, encoding="utf-8")
+        self.statusBar().showMessage(f"Report saved: {out}")
+
     def open_addons(self) -> None:
         AddonsDialog(self).exec()
 
@@ -451,6 +474,7 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
         self.start_btn.setText("Start scan")
         self.start_btn.setEnabled(bool(self.plan))
+        self.export_btn.setEnabled(False)
         self.detail.setHtml(self._placeholder())
         self.refresh()
         self.statusBar().showMessage(
@@ -510,6 +534,7 @@ class MainWindow(QMainWindow):
         self.scanning = False
         self.start_btn.setText("Rescan")
         self.start_btn.setEnabled(True)
+        self.export_btn.setEnabled(bool(self.findings))
         self.progress.setVisible(False)
         self.refresh()
         if not self.findings:
@@ -627,11 +652,23 @@ class MainWindow(QMainWindow):
         return [(g, rows[g]) for g in sorted(rows, key=key)]
 
     def refresh(self) -> None:
-        keep = self._selected().probe if self._selected() else None
+        sel = self.tree.selectedItems()
+        keep = sel[0].data(0, NAME_ROLE) if sel else None
         self.tree.blockSignals(True)
         self.tree.clear()
         dots = "." * (self._tick % 3 + 1)
         sel_item = None
+        summary = self._summary()
+        if summary:
+            si = QTreeWidgetItem(["Summary", summary[0], ""])
+            si.setData(0, NAME_ROLE, SUMMARY_KEY)
+            si.setData(1, ROLE, summary[1])
+            f0 = QFont(self.font())
+            f0.setBold(True)
+            si.setFont(0, f0)
+            self.tree.addTopLevelItem(si)
+            if keep == SUMMARY_KEY:
+                sel_item = si
         for group, items in self._groups():
             leads = sum(1 for _, f in items if f and _is_lead(f))
             ctx = bool(items) and all(f is not None and f.quiet for _, f in items)
@@ -684,7 +721,38 @@ class MainWindow(QMainWindow):
             sel_item.setSelected(True)
         self.tree.blockSignals(False)
 
+    def _summary(self) -> tuple[str, str] | None:
+        """(pill text, colour) for the Summary row: shown once a scan has finished and some probe offered a
+        location hint."""
+        if self.scanning or not self.findings:
+            return None
+        loc = location_summary(self.findings)
+        if loc["conflicts"]:
+            return "check clues", C["amber"]
+        if loc["n"]:
+            return f"{loc['n']} location hint{'s' if loc['n'] != 1 else ''}", C["blue"]
+        return None                                   # nothing to cross-check: no row
+
+    def _show_summary(self) -> None:
+        loc = location_summary(self.findings, lambda n: DISPLAY.get(n, n.replace("_", " ")))
+        leads = [f for f in self.findings if _is_lead(f)]
+        parts = [f"<h3>Summary</h3><p>{len(leads)} lead(s) from {len(self.findings)} probe(s).</p>",
+                 "<p><b>Where this points</b></p>"]
+        if loc["hints"]:
+            parts.append("<ul>" + "".join(f"<li>{_rich(h)}</li>" for h in loc["hints"]) + "</ul>")
+            parts += [f"<p>{_rich(n)}</p>" for n in loc["notes"]]
+        else:
+            parts.append("<p class='muted'>No probe offered a location hint (GPS tags, bird ranges and "
+                         "text clues such as calling codes, domains and currencies feed this).</p>")
+        parts.append("<p class='muted'>Hints are coarse (continent scale) and only cross-check each other; "
+                     "Export saves everything as a report.</p>")
+        self.detail.setHtml("".join(parts))
+
     def show_detail(self) -> None:
+        items = self.tree.selectedItems()
+        if items and items[0].data(0, NAME_ROLE) == SUMMARY_KEY:
+            self._show_summary()
+            return
         f = self._selected()
         if f is None:
             items = self.tree.selectedItems()

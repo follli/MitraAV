@@ -5,6 +5,7 @@ from pathlib import Path
 from PIL import Image
 
 from ..core.finding import Finding, FollowUp, MediaType
+from ..core.geo import hint, macros_for_latlon
 from ..core.probe import Probe
 from ..core.references import follow_ups
 
@@ -74,5 +75,7 @@ class MetadataProbe(Probe):
         return Finding(
             probe=self.name, detected=True, strength=strength, narrows=narrows,
             constrains=constrains, effort=effort, follow_ups=fups,
+            meta={"geo": hint(f"GPS tag ({latlon[0]:.2f}, {latlon[1]:.2f})", macros_for_latlon(*latlon), 0.9)}
+            if latlon else {},
             summary="; ".join(notes) + ". Consistent with the file's origin unless "
                     "edited or spoofed; EXIF is easy to alter.")

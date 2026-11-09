@@ -5,6 +5,7 @@ from pathlib import Path
 
 from ..core.finding import Finding, FollowUp, MediaType
 from ..core.frames import ffprobe
+from ..core.geo import hint, macros_for_latlon
 from ..core.probe import Probe
 from ..core.references import follow_ups
 
@@ -64,4 +65,6 @@ class VideoMetaProbe(Probe):
         s, n = max(scores, key=lambda x: x[0] * x[1])
         return Finding(probe=self.name, detected=True, strength=s, narrows=n, constrains=cons,
                        effort=effort, follow_ups=fups,
+                       meta={"geo": hint(f"location tag ({latlon[0]:.2f}, {latlon[1]:.2f})",
+                                         macros_for_latlon(*latlon), 0.9)} if latlon else {},
                        summary="; ".join(notes) + ". Container tags are easy to alter or strip.")

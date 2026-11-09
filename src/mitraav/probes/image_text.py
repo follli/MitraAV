@@ -17,6 +17,7 @@ from pathlib import Path
 from PIL import Image
 
 from ..core.finding import Finding, MediaType
+from ..core.geo import hint, macros_for_phrase
 from ..core.probe import Probe
 from ..core.references import _load, follow_ups
 
@@ -258,7 +259,10 @@ class ImageTextProbe(Probe):
         regions = sorted({where for key in ("phone", "domain", "currency", "units") for _, where in c[key]})
         return Finding(probe=self.name, detected=True, strength=min(1.0, 0.10 + 0.15 * specific),
                        meta={"context": {"text": dict(language=c["language"], script=script or None,
-                                                      regions=regions)}},
+                                                      regions=regions)},
+                             "geo": hint("text clues: " + ", ".join(regions[:3]),
+                                         set().union(*(macros_for_phrase(r) for r in regions)) if regions else set(),
+                                         min(0.35, 0.15 * len(regions)))},
                        narrows=0.3, constrains=sorted(set(cons)), effort=1, boxes=line_boxes(lines),
                        follow_ups=follow_ups("metadata", "text"),
                        summary="; ".join(notes) + ". Hints only: global services use foreign codes and currencies.")
