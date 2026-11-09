@@ -61,3 +61,42 @@ def test_enf_track_follows_a_drifting_supply(tmp_path):
     wavfile.write(p, sr, (x / np.abs(x).max() * 20000).astype(np.int16))
     fnd = HumProbe().run(p)
     assert fnd.detected and "frequency track runs from 49.9" in fnd.summary
+
+
+def _hum(tmp_path, f0, secs=40, sr=4000, jump_at=None, name="h.wav"):
+    import numpy as np
+    from scipy.io import wavfile
+    t = np.arange(sr * secs) / sr
+    f = np.full_like(t, f0)
+    if jump_at:
+        f[int(jump_at * sr):] += 0.5
+    ph = 2 * np.pi * np.cumsum(f) / sr
+    x = 0.1 * (np.sin(ph) + 0.6 * np.sin(2 * ph) + 0.4 * np.sin(3 * ph) + 0.25 * np.sin(4 * ph))
+    x += 0.01 * np.random.default_rng(0).standard_normal(t.size)
+    p = tmp_path / name
+    wavfile.write(p, sr, (x / np.abs(x).max() * 20000).astype(np.int16))
+    return p
+
+
+def test_hum_at_a_sped_up_frequency_is_reported_as_a_speed_change(tmp_path):
+    from mitraav.probes.hum import HumProbe
+    f = HumProbe().run(_hum(tmp_path, 52.5))
+    assert f.detected and "does not match 50 or 60 Hz" in f.summary and "+5.0%" in f.summary and "52.5" in f.summary
+
+
+def test_an_enf_frequency_jump_is_flagged_as_a_splice(tmp_path):
+    from mitraav.probes.hum import HumProbe
+    f = HumProbe().run(_hum(tmp_path, 50.0, secs=60, jump_at=30))
+    assert f.detected and "jumps by" in f.summary and "splice" in f.summary
+    assert f.meta["grid"]["hz"] == 50
+
+
+def test_grid_disagreement_between_probes_is_flagged_in_the_summary():
+    from mitraav.core.finding import Finding
+    from mitraav.core.geo import grid_hint
+    from mitraav.core.report import location_summary
+    a = Finding(probe="mains_hum", detected=True, meta=grid_hint(50, "mains hum"))
+    b = Finding(probe="lighting_flicker", detected=True, meta=grid_hint(60, "lighting flicker"))
+    notes = location_summary([a, b])["notes"]
+    assert any("mains frequency is" in n and "50 Hz according to mains hum" in n and "60 Hz according to lighting flicker" in n for n in notes)
+    assert not [n for n in location_summary([a, a.__class__(probe="x", detected=True, meta=grid_hint(50, "x"))])["notes"] if "frequency is" in n]

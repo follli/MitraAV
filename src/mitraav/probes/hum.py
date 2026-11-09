@@ -7,6 +7,7 @@ from scipy.signal import welch
 
 from ..core.audio import AudioError, load_audio
 from ..core.finding import Finding, MediaType
+from ..core.geo import grid_hint
 from ..core.probe import Probe
 from ..core.references import follow_ups
 
@@ -73,6 +74,33 @@ def enf_track(x: np.ndarray, sr: int, grid: int, harmonics: list[int], win: floa
     return np.array(out)
 
 
+def comb_search(x: np.ndarray, sr: int) -> tuple[float, list[int]] | None:
+    """A mains-like harmonic series whose fundamental is NOT 50 or 60 Hz: (fundamental Hz, harmonics hit).
+    Looks at 40-70 Hz in 0.05 Hz steps and needs at least three of the first four harmonics."""
+    nper = int(min(len(x), sr * 8))
+    f, p = welch(x, fs=sr, nperseg=nper, window="hann", noverlap=nper // 2 if len(x) > nper else 0)
+    best = None
+    for f0 in np.arange(40.0, 70.01, 0.05):
+        if abs(f0 - 50) <= 0.8 or abs(f0 - 60) <= 0.8:
+            continue
+        hits = []
+        for h in (1, 2, 3, 4):
+            if h * f0 + 8 >= sr / 2:
+                continue
+            r = _ratio_db(f, p, h * f0)
+            if r and r[0] >= HIT_DB + 3:
+                hits.append((h, r[0]))
+        if len(hits) >= 3 and (best is None or sum(d for _, d in hits) > best[0]):
+            best = (sum(d for _, d in hits), f0, [h for h, _ in hits])
+    if best is None:
+        return None
+    _, f0, hs = best
+    # refine with the highest harmonic: its peak position divided by its number
+    h = max(hs)
+    near = np.abs(f - h * f0) <= 0.6
+    return float(f[near][int(np.argmax(p[near]))] / h), hs
+
+
 def _detected(grid: int, hits) -> bool:
     return len(hits) >= 2 or any(h == grid and db >= FUND_DB for h, db, _ in hits)
 
@@ -96,6 +124,16 @@ class HumProbe(Probe):
         res = analyse(x, sr)
         det = {g: h for g, h in res.items() if _detected(g, h)}
         if not det:
+            shifted = comb_search(x, sr)
+            if shifted:
+                f0, hs = shifted
+                return Finding(
+                    probe=self.name, detected=True, strength=0.3, narrows=0.2, constrains=["origin"], effort=2,
+                    follow_ups=follow_ups("audio", "enf"),
+                    summary=f"a mains-like hum series with its fundamental at **{f0:.1f} Hz** (harmonics {', '.join(str(h) for h in hs)}) "
+                            f"does not match 50 or 60 Hz: consistent with 50 Hz hum in audio sped up by about "
+                            f"{(f0 / 50 - 1) * 100:+.1f}%, or 60 Hz hum changed by {(f0 / 60 - 1) * 100:+.1f}%, or with hum from "
+                            "equipment on another supply. A changed speed also shifts pitch and every other timing in the recording.")
             return Finding(
                 probe=self.name, detected=False,
                 summary="No 50/60 Hz hum above the noise floor. Phone mics, codecs and "
@@ -122,6 +160,11 @@ class HumProbe(Probe):
         if dur >= 20:
             tr = enf_track(x, sr, best, [h for h, _, _ in hits])
             tr = tr[~np.isnan(tr)]
+            if len(tr) >= 5 and np.max(np.abs(np.diff(tr))) > 0.06:
+                j = int(np.argmax(np.abs(np.diff(tr))))
+                notes.append(f"the frequency jumps by {np.abs(np.diff(tr))[j]:.2f} Hz between two analysis windows near "
+                             f"{(j + 1) * 2.0:.0f} s, far more than a grid drifts: consistent with a splice, an edit or a "
+                             "recorder glitch at that point")
             if len(tr) >= 5:
                 notes.append(f"the frequency track runs from {tr.min():.3f} to {tr.max():.3f} Hz over "
                              f"{dur:.0f} s (a grid frequency wanders slowly like this; a perfectly "
@@ -131,6 +174,6 @@ class HumProbe(Probe):
             notes.append(f"only {dur:.0f} s analysed; ENF log matching works best with minutes")
 
         return Finding(
-            probe=self.name, detected=True, strength=strength, narrows=0.5,
+            probe=self.name, detected=True, strength=strength, narrows=0.5, meta=grid_hint(best, "mains hum"),
             constrains=["region", "date"], effort=2,
             follow_ups=follow_ups("audio", "enf"), summary="; ".join(notes) + ".")

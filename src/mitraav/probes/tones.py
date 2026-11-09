@@ -36,8 +36,11 @@ class TonesChimesProbe(Probe):
         ups: list[FollowUp] = []
         for f in hits:
             ups += [u for u in f.follow_ups if all(u.name != o.name for o in ups)]
+        ctx: dict = {}
+        for f in hits:
+            ctx.update(f.meta.get("context", {}))
         return Finding(
-            probe=self.name, detected=True,
+            probe=self.name, detected=True, meta={"context": ctx} if ctx else {},
             strength=max(f.strength for f in hits), narrows=max(f.narrows for f in hits),
             constrains=sorted({c for f in hits for c in f.constrains}),
             effort=min(f.effort for f in hits),

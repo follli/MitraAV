@@ -71,6 +71,15 @@ def macros_for_latlon(lat: float, lon: float) -> set[str]:
     return set(BIRD_REGIONS.get(region_name(lat, lon), set()))
 
 
+GRID_MACROS = {50: {EU, AF, AS, OC, SA}, 60: {NA, CA, SA, AS}}      # lenient: several countries mix 50 and 60 Hz
+
+
+def grid_hint(hz: int, source: str, weight: float = 0.25) -> dict:
+    """meta for a probe that measured the mains frequency: a `grid` entry (for cross-checking probes against
+    each other) and a coarse `geo` hint."""
+    return {"grid": dict(hz=int(hz), source=source), "geo": hint(f"{hz} Hz mains ({source})", GRID_MACROS[int(hz)], weight)}
+
+
 def hint(label: str, any_of: set[str], weight: float) -> dict | None:
     """The dict a probe stores in meta["geo"] (None when there is nothing to say)."""
     if not any_of:

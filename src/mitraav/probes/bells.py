@@ -171,6 +171,7 @@ class ChurchBellsProbe:
                         f0=0.8 * b["nominal"] / 4, f1=1.6 * b["nominal"])
                    for b in bells[:8]]
         return Finding(probe=self.name, detected=True, strength=strength,
+                       meta={"context": {"bells": {"strikes": [round(s["t"], 2) for s in uniq], "distinct": len(bells)}}},
                        narrows=0.4 if len(bells) >= 3 else 0.25,
                        constrains=["region", "place"], effort=2, regions=regions,
                        follow_ups=follow_ups("audio", "bells"),

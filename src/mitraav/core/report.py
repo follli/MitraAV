@@ -37,6 +37,15 @@ def location_summary(findings: list[Finding], display=lambda n: n.replace("_", "
             f"but {display(pb)} ({b['label']}) points to {_names(b['any_of'])}. Innocent explanations "
             "include foreign signage or phone numbers, a widely ranging or migratory species, a "
             "re-uploaded file, or edited metadata; check which clue is the more reliable.")
+    grids = {}
+    for f in findings:
+        if f.status == "ok" and not f.inconclusive and f.meta.get("grid"):
+            grids.setdefault(f.meta["grid"]["hz"], []).append(display(f.probe))
+    if len(grids) > 1:
+        notes.append("**Possible disagreement:** the mains frequency is " + " but ".join(
+            f"{hz} Hz according to {', '.join(names)}" for hz, names in sorted(grids.items()))
+            + ". Both cannot be right for one place and time: check for a recording that was combined, converted "
+              "(a speed change shifts hum) or filmed under screens or LED drivers.")
     return dict(hints=lines, notes=notes, support=c["support"], common=c["common"],
                 conflicts=[(display(pa), display(pb)) for pa, _, pb, _ in c["conflicts"]], n=c["n"])
 

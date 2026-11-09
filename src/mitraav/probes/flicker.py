@@ -17,6 +17,7 @@ from scipy.signal import detrend, welch
 
 from ..core.finding import Finding, MediaType
 from ..core.frames import ffprobe
+from ..core.geo import grid_hint
 from ..core.probe import Probe
 from ..core.references import follow_ups
 
@@ -111,7 +112,7 @@ class FlickerProbe(Probe):
                 f"(a {m} Hz mains supply) and not what {2 * other} Hz would, which would fall near "
                 f"{r['cands'][other]:.1f} Hz. Consistent with a **{m} Hz mains region**; LED dimming "
                 "or a screen in view could imitate it")
-        return Finding(probe=self.name, detected=True,
+        return Finding(probe=self.name, detected=True, meta=grid_hint(m, "lighting flicker"),
                        strength=min(1.0, 0.35 + (r["over_db"] - MIN_PEAK_DB) / 40), narrows=0.3,
                        constrains=["region"], effort=1,
                        follow_ups=follow_ups("video", "flicker"), summary=note + ".")

@@ -132,6 +132,7 @@ class SoundEventsProbe(Probe):
             return Finding(probe=self.name, detected=False, status="not_run",
                            detail="No usable audio: need non-silent audio of at least 1 s")
         agg = aggregate(windows, labels)
+        label_counts = {lab.split(",")[0].lower(): len(v) for lab, v in agg.items()}
         busy_w = {int(round(t / 0.5)) for label, v in agg.items()
                   if categorise(label) in ("voices", "music") for t, _ in v}
         busy = min(1.0, len(busy_w) / max(len(windows), 1))
@@ -143,7 +144,7 @@ class SoundEventsProbe(Probe):
         shares = {c: min(1.0, len(w_) / max(len(windows), 1)) for c, w_ in shares.items()}
         events = summarise(agg)
         if not events:
-            return Finding(probe=self.name, detected=False, meta={"busy": busy, "shares": shares, "context": {"sound": {"busy": busy, "shares": shares}}},
+            return Finding(probe=self.name, detected=False, meta={"busy": busy, "shares": shares, "context": {"sound": {"busy": busy, "shares": shares, "labels": label_counts}}},
                            summary="No sound class scored clearly enough to name (generic noise, "
                                    "silence or very distant sounds).")
         by_cat: dict[str, list[dict]] = defaultdict(list)
