@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QRectF, QSize, Qt, QThread, QTimer, QUrl, Signal
@@ -61,6 +62,7 @@ EXPLAIN = ("A <b>lead</b> means the probe found something worth a look; <b>info<
 class ScanWorker(QThread):
     started_probe = Signal(str)
     found = Signal(object)
+    progress = Signal(str, float)
 
     def __init__(self, path: Path, only: set[str] | None = None, context: dict | None = None):
         super().__init__()
@@ -70,7 +72,7 @@ class ScanWorker(QThread):
 
     def run(self) -> None:
         scan(self.path, on_result=self.found.emit, on_start=self.started_probe.emit,
-             only=self.only, context=self.context)
+             only=self.only, context=self.context, on_progress=self.progress.emit)
 
 
 def _badge(f: Finding) -> tuple[str, str]:
@@ -268,6 +270,8 @@ class MainWindow(QMainWindow):
         self.quiet_groups: set[str] = set()
         self.plan: list[tuple[str, str]] = []        # (probe name, group) the scan will run
         self.running: str | None = None
+        self.running_since = time.monotonic()
+        self.running_frac: float | None = None
         self.collapsed: set[str] = {"Visual context"}     # quiet context starts folded away
         self.worker: ScanWorker | None = None
         self.scanning = False
@@ -510,11 +514,25 @@ class MainWindow(QMainWindow):
         self.worker = ScanWorker(path, only, context)
         self.worker.started_probe.connect(self.on_started)
         self.worker.found.connect(self.add_finding)
+        self.worker.progress.connect(self.on_progress)
         self.worker.finished.connect(self.scan_done)
         self.worker.start()
 
+    def _running_note(self) -> str:
+        """' 37% · 4m 12s' for the probe that is running: long files show that work is advancing."""
+        secs = int(time.monotonic() - self.running_since)
+        frac = self.running_frac
+        clock = f"{secs // 60}m {secs % 60:02d}s" if secs >= 60 else f"{secs}s"
+        return f" {frac * 100:.0f}% · {clock}" if frac is not None and secs >= 5 else (
+            f" {clock}" if secs >= 10 else "")
+
+    def on_progress(self, name: str, frac: float) -> None:
+        self.running_frac = frac
+
     def on_started(self, name: str) -> None:
         self.running = name
+        self.running_since = time.monotonic()
+        self.running_frac = None
         self.statusBar().showMessage(f"Running {DISPLAY.get(name, name.replace('_', ' '))} "
                                      f"({self.progress.value() + 1} of {self.progress.maximum()})...")
         self.refresh()
@@ -693,7 +711,7 @@ class MainWindow(QMainWindow):
                 if f is None:
                     running = name == self.running
                     queued = self.scanning and (self.active is None or name in self.active)
-                    it.setText(1, f"running{dots}" if running else ("queued" if queued else "ready"))
+                    it.setText(1, f"running{dots}{self._running_note()}" if running else ("queued" if queued else "ready"))
                     it.setData(1, ROLE, C["text"] if running else C["muted"])
                     it.setForeground(0, QColor(C["text"] if running else C["muted"]))
                 else:

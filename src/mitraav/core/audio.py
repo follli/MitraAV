@@ -108,6 +108,17 @@ def load_audio(path: Path, offset: float | None = None,
         raise AudioError(f"Could not read audio: {e}")
 
 
+progress_hook = None      # set inside a probe worker process: called with the fraction of the file done
+
+
+def _report(frac: float) -> None:
+    if progress_hook:
+        try:
+            progress_hook(min(max(frac, 0.0), 1.0))
+        except Exception:
+            pass
+
+
 def iter_chunks(path: Path, chunk: float = MAX_SECONDS, overlap: float = 30.0):
     """Yield (offset_s, samples, sr) over the whole file after leading silence. Silent chunks are
     skipped. Chunks overlap so an event on a boundary is seen whole at least once."""
@@ -121,6 +132,7 @@ def iter_chunks(path: Path, chunk: float = MAX_SECONDS, overlap: float = 30.0):
         first = True
         while first or off < total - 5.0:            # a short clip is one chunk, never none
             first = False
+            _report((off - start) / max(total - start, 1.0))
             x, sr = _read_wav(w, off, chunk)
             if len(x) and np.abs(x).max() > SILENCE:
                 yield off, x, sr

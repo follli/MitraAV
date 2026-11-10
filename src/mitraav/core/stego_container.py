@@ -7,6 +7,7 @@ so each observation carries a severity and a plain-language reason.
 """
 from __future__ import annotations
 
+import mmap
 import re
 import struct
 import zlib
@@ -57,20 +58,21 @@ def signature_of(b: bytes) -> str | None:
 
 def trailing(data: bytes, end: int, what: str) -> Observation | None:
     """Bytes after the logical end of the file."""
-    tail = data[end:]
-    if len(tail) <= BENIGN_TRAILING:
+    n = max(len(data) - end, 0)
+    if n <= BENIGN_TRAILING:
         return None
+    tail = data[end:end + 1_048_576]           # a sample is enough; the file may be gigabytes
     sig = signature_of(tail.lstrip(b"\x00"))
     ent = entropy(tail[:65536])
-    sev = 0.25 + (0.25 if len(tail) >= 1024 else 0.0) + (0.3 if sig else 0.0) + (0.15 if ent >= 7.2 and len(tail) >= 256 else 0.0)
-    bits = [f"{len(tail):,} bytes follow the end of the {what}"]
+    sev = 0.25 + (0.25 if n >= 1024 else 0.0) + (0.3 if sig else 0.0) + (0.15 if ent >= 7.2 and n >= 256 else 0.0)
+    bits = [f"{n:,} bytes follow the end of the {what}"]
     if sig:
         bits.append(f"they begin like {sig}")
-    if ent >= 7.2 and len(tail) >= 256:
+    if ent >= 7.2 and n >= 256:
         bits.append(f"they look random or compressed ({ent:.1f} bits per byte)")
-    elif len(tail) >= 256 and ent < 5.5:
+    elif n >= 256 and ent < 5.5:
         bits.append(f"they look like text or structured data ({ent:.1f} bits per byte)")
-    return Observation("trailing_data", min(sev, 0.95), ", ".join(bits), end, len(tail))
+    return Observation("trailing_data", min(sev, 0.95), ", ".join(bits), end, n)
 
 
 def _tool_words(blob: bytes, where: str, offset: int = 0) -> Observation | None:
@@ -231,7 +233,7 @@ def inspect_wav(data: bytes) -> list[Observation]:
     pos = 12
     while pos + 8 <= len(data):
         cid, size = data[pos:pos + 4], struct.unpack("<I", data[pos + 4:pos + 8])[0]
-        body = data[pos + 8:pos + 8 + size]
+        body = data[pos + 8:pos + 8 + (size if cid != b"data" else 0)]   # never copy the audio itself
         if cid not in WAV_KNOWN and size >= 64:
             obs.append(Observation("unknown_chunk", 0.4 + (0.1 if size >= 4096 else 0.0),
                                    f"an unrecognised chunk '{cid.decode('latin-1')}' of {size:,} bytes", pos, size))
@@ -345,10 +347,38 @@ def inspect_mp4(data: bytes) -> list[Observation]:
     return obs
 
 
+class _Mapped(mmap.mmap):
+    """Read-only memory map with the bytes methods the parsers use, so a multi-GB file is never copied into memory."""
+
+    def startswith(self, prefix) -> bool:
+        if isinstance(prefix, tuple):
+            return any(self.startswith(p) for p in prefix)
+        return self[:len(prefix)] == prefix
+
+
+LOAD_LIMIT = 64 * 1024 * 1024
+
+
 def inspect_file(path: Path) -> list[Observation]:
-    """Run the parser that matches the file's own signature (never trusting the extension alone)."""
-    data = Path(path).read_bytes()
-    head = data[:16]
+    """Run the parser that matches the file's own signature (never trusting the extension alone).
+
+    Files over 64 MB are memory-mapped instead of read whole (a 3-hour WAV is 2.6 GB)."""
+    p = Path(path)
+    size = p.stat().st_size
+    if size == 0:
+        return []
+    if size <= LOAD_LIMIT:
+        return _inspect(p.read_bytes())
+    with open(p, "rb") as fh:
+        mm = _Mapped(fh.fileno(), 0, access=mmap.ACCESS_READ)
+        try:
+            return _inspect(mm)
+        finally:
+            mm.close()
+
+
+def _inspect(data) -> list[Observation]:
+    head = bytes(data[:16])
     if head.startswith(b"\xff\xd8"):
         return inspect_jpeg(data)
     if head.startswith(b"\x89PNG"):

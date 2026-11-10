@@ -323,3 +323,19 @@ def test_findings_are_registered_as_probes_in_their_own_group():
     names = {c.name: c for c in discover_probes()}
     for n in ("hidden_data_container", "hidden_data_pixels", "hidden_data_audio", "hidden_data_video"):
         assert names[n].group == "Hidden data"
+
+
+def test_large_files_are_memory_mapped_with_the_same_result(tmp_path, monkeypatch):
+    import struct
+
+    from mitraav.core import stego_container as sc
+    pcm = b"\x01\x00" * 40000
+    fmt = struct.pack("<HHIIHH", 1, 1, 8000, 16000, 2, 16)
+    body = b"WAVE" + b"fmt " + struct.pack("<I", 16) + fmt + b"data" + struct.pack("<I", len(pcm)) + pcm
+    wav = b"RIFF" + struct.pack("<I", len(body)) + body + b"PK\x03\x04" + bytes(range(256)) * 8
+    p = tmp_path / "t.wav"
+    p.write_bytes(wav)
+    whole = [(o.kind, o.offset, o.size) for o in sc.inspect_file(p)]
+    monkeypatch.setattr(sc, "LOAD_LIMIT", 1000)
+    mapped = [(o.kind, o.offset, o.size) for o in sc.inspect_file(p)]
+    assert whole == mapped and any(k == "trailing_data" for k, _, _ in whole)

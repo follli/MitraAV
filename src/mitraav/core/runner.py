@@ -4,6 +4,7 @@ import importlib
 import inspect
 import multiprocessing as mp
 import pkgutil
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from functools import lru_cache
@@ -86,7 +87,18 @@ def _worker(conn, probe_cls, path, context=None, plugin=None, name=""):
             probe_cls = load_class(*plugin)
         probe = probe_cls()
         probe.context = dict(context or {})
+        from . import audio
+        last = [0.0]
+
+        def hook(frac: float) -> None:           # tell the parent how far through a long file we are
+            now = time.monotonic()
+            if now - last[0] >= 1.0:
+                last[0] = now
+                conn.send(("progress", frac))
+        audio.progress_hook = hook
         conn.send(probe.run(path))
+    except BrokenPipeError:     # the scan was closed while this probe ran: nobody is listening
+        pass
     except Exception as e:  # report, never crash the scan
         conn.send(Finding(probe=name or getattr(probe_cls, "name", "plugin"), detected=False,
                           status="error", detail=f"{type(e).__name__}: {e}"))
@@ -94,8 +106,10 @@ def _worker(conn, probe_cls, path, context=None, plugin=None, name=""):
         conn.close()
 
 
-def run_probe(probe_cls: type[Probe], path: Path, context: dict | None = None) -> Finding:
-    """Run one probe in its own process so a hang can be killed."""
+def run_probe(probe_cls: type[Probe], path: Path, context: dict | None = None,
+              on_progress: Callable[[str, float], None] | None = None) -> Finding:
+    """Run one probe in its own process so a hang can be killed. The timeout is a stall limit: it
+    restarts whenever the probe reports progress, so a 3-hour file is not killed while it advances."""
     ctx = mp.get_context("spawn")
     parent, child = ctx.Pipe(duplex=False)
     plugin_file = getattr(probe_cls, "_plugin_file", None)
@@ -105,11 +119,22 @@ def run_probe(probe_cls: type[Probe], path: Path, context: dict | None = None) -
     proc.start()
     child.close()
     try:
-        if parent.poll(probe_cls.timeout):
-            result = parent.recv()
-        else:
-            result = Finding(probe=probe_cls.name, detected=False, status="timeout",
-                             detail=f"No result within {probe_cls.timeout:g}s")
+        deadline = time.monotonic() + probe_cls.timeout
+        result = None
+        while result is None:
+            left = deadline - time.monotonic()
+            if left <= 0 or not parent.poll(min(left, 1.0)):
+                if left <= 0:
+                    result = Finding(probe=probe_cls.name, detected=False, status="timeout",
+                                     detail=f"No result within {probe_cls.timeout:g}s")
+                continue
+            msg = parent.recv()
+            if isinstance(msg, tuple) and msg and msg[0] == "progress":
+                deadline = time.monotonic() + probe_cls.timeout
+                if on_progress:
+                    on_progress(probe_cls.name, float(msg[1]))
+                continue
+            result = msg
     except EOFError:
         result = Finding(probe=probe_cls.name, detected=False, status="error",
                          detail="Probe process died")
@@ -175,7 +200,8 @@ def planned(path: Path) -> list[tuple[type[Probe], str]]:
 
 def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
          on_start: Callable[[str], None] | None = None, only: set[str] | None = None,
-         context: dict | None = None) -> list[Finding]:
+         context: dict | None = None,
+         on_progress: Callable[[str, float], None] | None = None) -> list[Finding]:
     """Run the planned probes, or just those named in `only`. `context` carries what an earlier
     sound overview found ({"busy": share, "shares": {...}}) so a partial run can still judge masking;
     when a partial run needs it and has none, the sound overview is run first."""
@@ -193,7 +219,7 @@ def scan(path: Path, on_result: Callable[[Finding], None] | None = None,
     for cls, mode in todo:
         if on_start:
             on_start(cls.name)
-        f = run_probe(cls, path, ctx) if mode == "direct" else run_on_frames(cls, path, ctx)
+        f = (run_probe(cls, path, ctx, on_progress) if on_progress else run_probe(cls, path, ctx)) if mode == "direct" else run_on_frames(cls, path, ctx)
         ctx = merge_context(ctx, f.meta.get("context"))
         plugin_file = getattr(cls, "_plugin_file", None)
         if plugin_file:                      # let the GUI and reports say this row came from a plugin

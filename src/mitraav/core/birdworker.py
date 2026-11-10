@@ -67,8 +67,10 @@ def main(path: str) -> None:
     import birdnet
     import numpy as np
 
+    from mitraav.core import audio
     from mitraav.core.audio import iter_chunks
 
+    audio.progress_hook = lambda f: (sys.stderr.write(f"@@P@@{f:.4f}\n"), sys.stderr.flush())
     model = birdnet.load("acoustic", "2.4", "tf", library="litert")
     out = []
     for off, x, sr in iter_chunks(Path(path)):

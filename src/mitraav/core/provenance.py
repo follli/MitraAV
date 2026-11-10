@@ -108,9 +108,14 @@ def _find_names(text: str, names) -> list[str]:
 
 def analyse(path: Path) -> Provenance:
     p = Path(path)
-    data = p.read_bytes()
-    if len(data) > 32_000_000:
-        data = data[:24_000_000] + data[-4_000_000:]
+    size = p.stat().st_size
+    with open(p, "rb") as fh:
+        if size > 32_000_000:                   # head and tail only: manifests live at the ends
+            data = fh.read(24_000_000)
+            fh.seek(-4_000_000, 2)
+            data += fh.read()
+        else:
+            data = fh.read()
     res = Provenance()
     for where, blob in _blobs(data):
         is_c2pa = (b"c2pa" in blob and b"jumb" in blob) or where in ("PNG caBX",) or blob[:16] == C2PA_UUID

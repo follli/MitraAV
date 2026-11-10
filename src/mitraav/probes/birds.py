@@ -9,9 +9,12 @@ import importlib.util
 import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from urllib.parse import quote_plus
 
+from ..core import audio
 from ..core.audio import AudioError, total_seconds
 from ..core.birdworker import geo_model_path, human_segments, model_path, summarise
 from ..core.finding import Finding, FollowUp, MediaType
@@ -21,6 +24,48 @@ from ..core.references import follow_ups
 
 MARK = "@@JSON@@"
 INSTALL = "install it from Add-ons in the app, or run: mitraav-setup --install birds"
+
+
+def _run_worker(path: Path, stall_limit: float) -> subprocess.CompletedProcess:
+    """Run the BirdNET worker, relaying its progress to the scan and killing it only if it stalls
+    (no progress for `stall_limit` seconds), so a 3-hour file is not cut off while it advances."""
+    proc = subprocess.Popen([sys.executable, "-m", "mitraav.core.birdworker", str(path)],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out: list[str] = []
+    err: list[str] = []
+    last = [time.monotonic()]
+
+    def read_out() -> None:
+        out.append(proc.stdout.read())
+
+    def read_err() -> None:
+        for line in proc.stderr:
+            if line.startswith("@@P@@"):
+                last[0] = time.monotonic()
+                try:
+                    audio._report(float(line[5:]))
+                except ValueError:
+                    pass
+            else:
+                err.append(line)
+                del err[:-30]
+
+    threads = [threading.Thread(target=f, daemon=True) for f in (read_out, read_err)]
+    for t in threads:
+        t.start()
+    try:
+        while proc.poll() is None:
+            if time.monotonic() - last[0] > stall_limit:
+                proc.kill()
+                proc.wait()
+                raise subprocess.TimeoutExpired(proc.args, stall_limit)
+            time.sleep(0.5)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    for t in threads:
+        t.join(5)
+    return subprocess.CompletedProcess(proc.args, proc.returncode, "".join(out), "".join(err))
 
 
 class BirdProbe(Probe):
@@ -40,13 +85,12 @@ class BirdProbe(Probe):
                            detail=f"BirdNET model not downloaded (scans never download): {INSTALL}")
         try:
             total_seconds(path)
-            r = subprocess.run([sys.executable, "-m", "mitraav.core.birdworker", str(path)],
-                               capture_output=True, text=True, timeout=self.timeout - 30)
+            r = _run_worker(path, self.timeout - 30)
         except AudioError as e:
             return Finding(probe=self.name, detected=False, status="not_run", detail=str(e))
         except subprocess.TimeoutExpired:
             return Finding(probe=self.name, detected=False, status="timeout",
-                           detail="BirdNET took too long on this file")
+                           detail="BirdNET stopped making progress on this file")
         if r.returncode != 0 or MARK not in r.stdout:
             return Finding(probe=self.name, detected=False, status="error",
                            detail=f"BirdNET failed: {r.stderr.strip()[-300:]}")

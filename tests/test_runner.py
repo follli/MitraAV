@@ -72,3 +72,23 @@ def test_context_rebuilt_from_findings_for_a_partial_run():
 
 def test_probes_work_without_any_context():
     assert run_probe(Reader, Path(".")).summary == "None"
+
+
+class Slow(Probe):
+    """Longer than its timeout in total, but always advancing: must not be killed."""
+    name = "slow_but_moving"
+    timeout = 2.0
+
+    def run(self, path):
+        from mitraav.core import audio
+        for i in range(5):
+            time.sleep(1.2)
+            audio._report((i + 1) / 5)
+        return Finding(probe=self.name, detected=True, strength=1, narrows=1)
+
+
+def test_progress_restarts_the_stall_timeout():
+    seen = []
+    f = run_probe(Slow, Path("."), on_progress=lambda name, frac: seen.append(frac))
+    assert f.status == "ok" and f.detected
+    assert seen and seen[-1] > 0.5
