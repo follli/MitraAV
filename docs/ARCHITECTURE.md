@@ -100,6 +100,17 @@ autocorrelation, ELA against local detail), `sun_moon_check` (`core/astro.py`), 
 add-on, offline) and `core/dupes.py` (near-duplicate groups for a folder). The mains-hum probe also reports speed
 changes and ENF jumps, and publishes `meta["grid"]` so the report can flag a 50 Hz hum against 60 Hz flicker.
 
+## Doppler detection
+
+`probes/doppler.py` uses two detectors. The ridge tracker (`core/tracks.py`) follows narrow moving lines and
+`stitch` rejoins pieces that a noise burst cut apart. The matched filter (`core/combfit.py`) integrates the
+spectrogram along every candidate pass-by curve and its harmonics, and trusts a candidate only when its
+downward score is at least 1.6 times the best upward-glide score (noise has no direction, an aircraft does);
+the best candidates are refined by a ridge following the curve and a Doppler fit. Events seen by both are
+merged and the matched fit supplies speed and distance where the tracker could only give a lower bound.
+`scripts/eval_flight_dataset.py` scores this against the Zenodo aeroplane dataset (34 of 40 closest-approach
+times within 5 s, up from 31; speed within about 30% on most hits, distance rougher).
+
 ## Scoring shown to users
 
 `Finding.score = strength x narrows / (1 + 0.25 x (effort - 1))` orders results. The table shows

@@ -21,7 +21,7 @@ recognition, no plate reading, no phone numbers or e-mail addresses echoed back)
 - **Bird species by sound** (BirdNET add-on): species candidates plus a general region and season.
 - **What the sounds are:** a sound overview naming trains, horns, bells, sirens, aircraft, animals,
   weather, voices and music, with the weaker guesses kept but muted.
-- **Doppler pass-bys:** speed, closest distance and the time offset between events, shown on the signal.
+- **Doppler pass-bys:** speed, closest distance and the time offset between events, shown on the signal. Faint passes under noise are found by adding up the spectrogram along the whole predicted curve (a matched filter), not only by following a visible line.
 - **Tones and chimes:** church bell pitch, telephone and alert tones, and any other stable pitch measured
   and named (a lift chime, a beeper).
 - **Siren patterns** (wail, yelp, two-tone) and **broadband jet pass-bys**.

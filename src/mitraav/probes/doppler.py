@@ -9,10 +9,11 @@ from scipy.optimize import curve_fit
 from scipy.stats import spearmanr
 
 from ..core.audio import AudioError, iter_chunks
+from ..core.combfit import detect as matched_filter
 from ..core.finding import Finding, MediaType
 from ..core.probe import Probe
 from ..core.references import follow_ups
-from ..core.tracks import Track, trace
+from ..core.tracks import Track, stitch, trace
 
 C = 343.0                    # speed of sound, m/s
 WINDOWS = (0.12, 0.35, 0.9)  # analysis window lengths (s): fast sweeps need short, slow curves long
@@ -21,6 +22,7 @@ MIN_NARROW_DB = 8.5          # ridge must stand this far above neighbouring bins
 MAX_SLOPE = 0.09             # 90th percentile |d ln f / dt| (per s)
 MAX_JITTER = 0.013           # 90th percentile deviation from a running median
 MIN_SLANT_M = 100.0          # a 'closest distance' below this is a near-step fit, not a measurement
+MF_MAX_CHUNKS = 6            # chunks (5 min each) the matched-filter detector scans
 MAX_UP = 0.15                # lone tracks that step up and down are machinery, not glides
 MIN_RATIO = 1.08             # smaller glides are indistinguishable from drifting noise
 
@@ -160,8 +162,40 @@ def group_events(evals: list[dict]) -> list[dict]:
     return sorted(kept, key=lambda e: e["t0"])
 
 
+def matched_event(r: dict) -> dict:
+    """An event dict (same keys as evaluate) from a refined matched-filter candidate."""
+    dur = r["t_end"] - r["t_start"]
+    beta, tau = r["beta"], r["tau"]
+    return dict(hi=r["hi"], lo=r["lo"], r2=r["r2"], beta=beta, beta_lb=(r["hi"] - r["lo"]) / (r["hi"] + r["lo"]),
+                t0=r["t0"], tau=tau, dur=dur, t_start=r["t_start"], t_end=r["t_end"], support=1, narrow=r["ratio"], up=0.0,
+                sat=bool(tau <= 0.5 * dur and r["t_start"] < r["t0"] < r["t_end"] and beta * C * tau >= MIN_SLANT_M
+                         and 0.03 <= beta <= 0.6),
+                level_ok=False, matched=True, ratio=r["ratio"], harmonic=r["harmonic"])
+
+
+def merge_matched(events: list[dict], matched: list[dict]) -> list[dict]:
+    """Add the matched-filter events to the tracker's. Where both see the same pass (closest approaches within
+    8 s) the tracker's event is kept, and if it could only give a lower bound while the matched fit gives
+    numbers, those numbers are attached. A matched event alone is kept when its evidence ratio is high."""
+    out = [dict(e) for e in events]
+    for m in matched:
+        near = [e for e in out if abs(e["t0"] - m["t0"]) <= max(8.0, 0.2 * max(e["dur"], m["dur"]))]
+        if near:
+            e = near[0]
+            e["confirmed"] = True
+            if not e["sat"] and m["sat"]:
+                e.update(beta=m["beta"], tau=m["tau"], sat=True, from_matched=True)      # the tracker keeps its own time
+            continue
+        out.append(m)
+    return sorted(out, key=lambda e: e["t0"])
+
+
 def describe(i: int, e: dict) -> str:
     s = f"**event {i}**: closest approach heard near {e['t0']:.0f} s, pitch {e['hi']:.0f} to {e['lo']:.0f} Hz"
+    if e.get("matched"):
+        s += f" (found by integrating along the predicted curve, evidence {e['ratio']:.1f}x the best upward glide)"
+    elif e.get("from_matched"):
+        s += " (numbers from a fit to the whole curve)"
     if e["support"] > 1:
         s += f" ({e['support']} matching tracks, e.g. harmonics)"
     if e["sat"]:
@@ -185,42 +219,45 @@ class DopplerProbe(Probe):
 
     def run(self, path: Path) -> Finding:
         tracks: list[Track] = []
+        matched: list[dict] = []
         n_chunks = 0
         try:
             for off, x, sr in iter_chunks(path):
                 if len(x) / sr < 5 or sr < 2000:
                     continue
                 n_chunks += 1
+                if n_chunks <= MF_MAX_CHUNKS:
+                    matched += [matched_event(r) for r in matched_filter(x, sr, fit_doppler, offset=off)
+                                if r["r2"] >= 0.9 and r["t_end"] - r["t_start"] >= 12]
                 for w in WINDOWS:
-                    for tr in trace(x, sr, nperseg=int(2 ** round(np.log2(sr * w))), fmax=FMAX):
+                    found = trace(x, sr, nperseg=int(2 ** round(np.log2(sr * w))), fmax=FMAX)
+                    for tr in found:
                         tr.t = tr.t + off          # report file-absolute time
-                        tracks.append(tr)
+                    tracks += found
+                    tracks += [tr for tr in stitch(found) if all(tr is not f for f in found)]   # glides cut apart by bursts
         except AudioError as e:
             return Finding(probe=self.name, detected=False, status="not_run", detail=str(e))
         if not n_chunks:
             return Finding(probe=self.name, detected=False, status="not_run",
                            detail="No usable audio: need at least 5 s of non-silent audio "
                                   "sampled at 2 kHz or more")
-        if not tracks:
-            return Finding(
-                probe=self.name, detected=False,
-                summary="No sustained moving tone found. Jet pass-bys are broadband and often "
-                        "show no clean tone; propellers, rotors, horns and engines do. Very faint "
-                        "curves can also be hidden: boost levels and check the spectrogram by eye.")
-        evals = [e for e in map(evaluate, tracks) if e]
-        if not evals:
-            return Finding(
-                probe=self.name, detected=False,
-                summary=f"{len(tracks)} moving tone track(s) found, none shaped like a pass-by "
-                        "(a smooth downward glide of 8-200% pitch change).")
-
-        events = group_events(dedupe(evals))
+        evals = [e for e in map(evaluate, tracks) if e] if tracks else []
+        events = group_events(dedupe(evals)) if evals else []
+        events = merge_matched(events, matched)
         if not events:
-            return Finding(
-                probe=self.name, detected=False,
-                summary=f"{len(evals)} glide(s) found but none long or consistent enough to be a "
-                        "pass-by (isolated tracks need 8 s and a 15% pitch change).")
-        strong = [e for e in events if e["support"] > 1 or (e["sat"] and e["up"] <= MAX_UP)]
+            if not tracks:
+                msg = ("No sustained moving tone found. Jet pass-bys are broadband and often show no clean tone; "
+                       "propellers, rotors, horns and engines do. Very faint curves can also be hidden: boost levels "
+                       "and check the spectrogram by eye.")
+            elif not evals:
+                msg = (f"{len(tracks)} moving tone track(s) found, none shaped like a pass-by "
+                       "(a smooth downward glide of 8-200% pitch change).")
+            else:
+                msg = (f"{len(evals)} glide(s) found but none long or consistent enough to be a "
+                       "pass-by (isolated tracks need 8 s and a 15% pitch change).")
+            return Finding(probe=self.name, detected=False, summary=msg)
+        strong = [e for e in events if e["support"] > 1 or (e["sat"] and e["up"] <= MAX_UP) or e.get("confirmed")
+                  or (e.get("matched") and e["ratio"] >= 2.2)]
         weak = [e for e in events if e not in strong]
         if not strong:       # keep the best lone track so something is reported, flagged weak
             strong, weak = [max(events, key=lambda e: e["r2"] * min(e["dur"], 10))], []

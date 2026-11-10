@@ -7,7 +7,7 @@ import pytest
 from scipy.io import wavfile
 
 from mitraav.core.runner import scan
-from mitraav.probes.doppler import doppler_model, fit_doppler
+from mitraav.probes.doppler import DopplerProbe, doppler_model, fit_doppler
 
 SR = 16000
 
@@ -97,3 +97,53 @@ def test_retarded_time_model_matches_the_exact_geometry():
     sel = (ta > t_closest_heard - 40) & (ta < t_closest_heard + 40)
     f_model = doppler_model(ta[sel], f0, v / C, t_closest_heard, d / v)
     assert np.max(np.abs(f_model - f_true[sel])) < 0.02
+
+
+def _faint_pass(seed=0, secs=90, t0=45.0, beta=0.2, tau=6.0, f0=110.0, snr_amp=0.004, mirror=False):
+    """A harmonic engine tone buried in noise, cut by loud broadband bursts (the ridge tracker loses it)."""
+    rng = np.random.default_rng(seed)
+    t = np.arange(SR * secs) / SR
+    u = (t - t0) / tau
+    sign = -1 if mirror else 1
+    f = f0 / (1 + sign * beta * u / np.sqrt(1 + u * u))
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    x = sum(snr_amp / k ** 0.5 * np.sin(k * ph) for k in range(1, 7))
+    x = x + 0.02 * rng.standard_normal(t.size)
+    for b in np.arange(4.0, secs - 2, 5.5):                               # wind and traffic bursts
+        a = int(b * SR)
+        x[a:a + int(0.9 * SR)] += 0.15 * rng.standard_normal(int(0.9 * SR))
+    return x
+
+
+def test_matched_filter_finds_a_faint_pass_the_tracker_loses_and_ignores_noise_and_upward_glides(tmp_path):
+    from mitraav.core.combfit import detect
+    from mitraav.probes.doppler import fit_doppler
+    x = _faint_pass()
+    found = detect(x, SR, fit_doppler)
+    assert found and abs(found[0]["t0"] - 45.0) <= 4.0 and found[0]["ratio"] >= 1.6
+    assert 50 < found[0]["beta"] * 343 < 90                                   # true speed 0.2 * 343 = 69 m/s
+    assert detect(_faint_pass(mirror=True), SR, fit_doppler) == []             # a glide UP is not an aircraft pass
+    assert detect(0.02 * np.random.default_rng(1).standard_normal(SR * 90), SR, fit_doppler) == []
+
+
+def test_probe_reports_the_faint_pass_with_numbers(tmp_path):
+    p = tmp_path / "faint.wav"
+    wavfile.write(p, SR, (np.clip(_faint_pass(), -1, 1) * 30000).astype(np.int16))
+    f = DopplerProbe().run(p)
+    assert f.detected and "closest approach heard near 4" in f.summary
+    assert "m/s" in f.summary
+
+
+def test_stitch_joins_pieces_of_one_glide_but_not_different_harmonics():
+    from mitraav.core.tracks import Track, stitch
+
+    def piece(t0, t1, k=1.0):
+        t = np.arange(t0, t1, 0.2)
+        f = k * (300 - 6 * (t - 10))                                         # a steady downward glide
+        return Track(t=t, f=f, prom=np.full(len(t), 12.0), level=np.full(len(t), 60.0), span=len(t))
+
+    a, b = piece(10, 18), piece(22, 30)
+    joined = stitch([a, b])
+    assert len(joined) == 1 and joined[0].t[0] == 10 and joined[0].t[-1] < 30.0
+    assert len(stitch([a, piece(22, 30, k=2.0)])) == 2                       # the octave above is another line
+    assert len(stitch([a, piece(40, 48)])) == 2                              # a gap longer than the limit
