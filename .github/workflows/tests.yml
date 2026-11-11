@@ -1,4 +1,4 @@
-# Draft CI: not yet run on GitHub. Model-dependent tests skip themselves when add-ons are absent.
+# Model-dependent tests skip themselves when add-ons are absent.
 name: tests
 on: [push, pull_request]
 jobs:
@@ -24,4 +24,5 @@ jobs:
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
+          MITRAAV_NO_MEDIA: "1"   # no audio stack on the runner: QMediaDevices crashes
         run: pytest -q

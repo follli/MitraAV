@@ -6,6 +6,7 @@ If Qt's multimedia support is missing, the widget degrades to thumbnails and say
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -38,6 +39,8 @@ def media_modules():
     libraries can crash on machines without audio or graphics hardware, so nothing touches them
     until a playable file is opened). False when unavailable."""
     global _MEDIA
+    if os.environ.get("MITRAAV_NO_MEDIA"):     # headless machines (CI): the audio stack can crash
+        return False
     if _MEDIA is None:
         try:
             from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
